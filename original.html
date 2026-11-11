@@ -1,0 +1,3144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Logic Gate Simulator – High Performance</title>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --toolbar-bg: #ffffff;
+            --text-color: #1f2937;
+            --border-color: #ddd;
+            --gate-bg: #ffffff;
+            --gate-border: #333;
+            --gate-header: #333;
+            --dot-color: #d1d5db;
+            --pixel-off: #2d2d2d;
+            --pixel-on: #39ff14;
+            --pixel-border: #555;
+            --snap-grid: 20px;
+        }
+        body.dark-theme {
+            --bg-color: #1e1e24;
+            --toolbar-bg: #282830;
+            --text-color: #f3f4f6;
+            --border-color: #3f3f46;
+            --gate-bg: #2d3748;
+            --gate-border: #4a5568;
+            --gate-header: #1a202c;
+            --dot-color: rgba(255, 255, 255, 0.15);
+            --pixel-off: #1a1a1a;
+            --pixel-on: #39ff14;
+            --pixel-border: #666;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        #toolbar {
+            background: var(--toolbar-bg);
+            padding: 4px 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            align-items: center;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            border-bottom: 1px solid var(--border-color);
+            max-height: 58px;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+        button,
+        .tool-btn {
+            padding: 4px 7px;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 11px;
+            flex-shrink: 0;
+            pointer-events: auto !important;
+            transition: background 0.1s;
+        }
+        button:hover,
+        .tool-btn:hover {
+            background: #0056b3;
+        }
+        .tool-btn {
+            cursor: grab;
+            touch-action: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .tool-btn:active {
+            cursor: grabbing;
+        }
+        .toolbar-group {
+            display: flex;
+            gap: 3px;
+            align-items: center;
+            border-left: 2px solid var(--border-color);
+            padding-left: 5px;
+            flex-shrink: 0;
+        }
+        .toolbar-group:first-child {
+            border-left: none;
+            padding-left: 0;
+        }
+        #viewport {
+            position: absolute;
+            top: 62px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            cursor: grab;
+            touch-action: none;
+        }
+        #viewport:active {
+            cursor: grabbing;
+        }
+        #canvas {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            transform-origin: 0 0;
+            pointer-events: all;
+            will-change: transform;
+        }
+        #grid-bg {
+            position: absolute;
+            top: -5000px;
+            left: -5000px;
+            width: 10000px;
+            height: 10000px;
+            background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+            pointer-events: auto;
+            z-index: 0;
+        }
+        svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: all;
+            overflow: visible;
+            z-index: 1;
+        }
+        .gate {
+            position: absolute;
+            --gate-color: var(--gate-header);
+            background: var(--gate-bg);
+            border: 2px solid var(--gate-color);
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            cursor: move;
+            z-index: 3;
+            touch-action: none;
+            pointer-events: auto;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            width: 140px;
+            height: auto;
+            min-width: 140px;
+            will-change: transform, left, top;
+        }
+        .gate.powered {
+            border-color: var(--gate-color);
+            box-shadow: 0 0 10px color-mix(in srgb, var(--gate-color) 55%, transparent);
+        }
+        .gate-header {
+            background: var(--gate-color);
+            color: #fff;
+            padding: 4px 6px;
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            position: relative;
+            gap: 4px;
+            min-height: 26px;
+        }
+        .delete-btn {
+            background: transparent;
+            border: none;
+            color: #ff6b6b;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 1px 4px;
+            font-size: 14px;
+            line-height: 1;
+            border-radius: 3px;
+            z-index: 4;
+            pointer-events: auto;
+            flex-shrink: 0;
+        }
+        .delete-btn:hover {
+            background: rgba(255, 0, 0, 0.2);
+            color: #f00;
+        }
+        .gate-body {
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: var(--text-color);
+        }
+        .port-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 10px;
+            gap: 4px;
+        }
+        .port-row.output-row {
+            flex-direction: row-reverse;
+        }
+        .port-label-input {
+            background: rgba(0, 0, 0, 0.25);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-size: 10px;
+            width: 50px;
+            outline: none;
+            cursor: text;
+            pointer-events: auto;
+        }
+        .port-label-input:focus {
+            border-color: #fff;
+            background: rgba(0, 0, 0, 0.4);
+        }
+        .port {
+            width: 14px;
+            height: 14px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: crosshair;
+            position: relative;
+            z-index: 4;
+            border: 2px solid #fff;
+            pointer-events: auto;
+            touch-action: none;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0;
+            color: transparent;
+            transition: background 0.1s, transform 0.1s;
+            will-change: background, transform;
+        }
+        .port.output {
+            background: #e83e8c;
+        }
+        .port.active-port {
+            background: #28a745 !important;
+            box-shadow: 0 0 6px #28a745;
+        }
+        .port:hover {
+            transform: scale(1.15);
+        }
+        .switch-btn {
+            padding: 3px 6px;
+            font-size: 10px;
+            background: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            z-index: 4;
+            position: relative;
+            pointer-events: auto;
+            touch-action: manipulation;
+            transition: background 0.1s;
+        }
+        .switch-btn.active {
+            background: #28a745;
+        }
+        .delay-input {
+            width: 34px;
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 1px 3px;
+            font-size: 10px;
+            text-align: center;
+            z-index: 4;
+            pointer-events: auto;
+        }
+        .delay-input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        .bulb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ddd;
+            border: 2px solid #555;
+            flex-shrink: 0;
+            transition: background 0.1s, box-shadow 0.1s;
+        }
+        .bulb.on {
+            background: #ffc107;
+            box-shadow: 0 0 10px #ffc107;
+            border-color: #d39e00;
+        }
+        .gate-pixel {
+            border-radius: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            cursor: move;
+            margin: 0 !important;
+            padding: 0 !important;
+            position: absolute;
+            z-index: 3;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            width: 40px !important;
+            height: 40px !important;
+            min-width: 40px !important;
+            min-height: 40px !important;
+            will-change: transform, left, top, width, height;
+        }
+        .gate-pixel .gate-body {
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0 !important;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            border: none !important;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+        }
+        .gate-pixel .gate-header {
+            display: none !important;
+        }
+        .gate-pixel.powered {
+            border: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+        }
+        .pixel-square {
+            width: 100%;
+            height: 100%;
+            background: var(--pixel-off);
+            border: none !important;
+            border-radius: 0 !important;
+            position: relative;
+            transition: background 0.05s, box-shadow 0.05s;
+            flex-shrink: 0;
+            cursor: move;
+            margin: 0 !important;
+            padding: 0 !important;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            transform: translateZ(0);
+            -webkit-transform: translateZ(0);
+            outline: none !important;
+            box-sizing: border-box !important;
+            will-change: background, width, height;
+        }
+        .pixel-square.on {
+            background: var(--pixel-on);
+            box-shadow: 0 0 15px var(--pixel-on);
+        }
+        .pixel-square .port {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%) scale(0.7);
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: rgba(0, 123, 255, 0.9);
+            border: 2px solid #fff;
+            cursor: crosshair;
+            z-index: 5;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s ease, transform 0.12s ease;
+            box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .gate-pixel:hover .pixel-square .port {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .pixel-square .port.active-port {
+            background: #28a745 !important;
+            box-shadow: 0 0 12px rgba(40, 167, 69, 0.6);
+        }
+        .pixel-square .port.output {
+            background: #e83e8c;
+        }
+        .pixel-delete-btn {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(220, 53, 69, 0.95);
+            border: 2px solid #fff;
+            color: #fff;
+            font-size: 12px;
+            line-height: 16px;
+            text-align: center;
+            cursor: pointer;
+            z-index: 9999 !important;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            padding: 0;
+            pointer-events: auto;
+            transition: transform 0.12s ease;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .gate-pixel:hover .pixel-delete-btn {
+            display: block;
+        }
+        .pixel-delete-btn:hover {
+            background: #dc3545;
+            transform: scale(1.15);
+        }
+        .pixel-resize-handle {
+            position: absolute;
+            bottom: -8px;
+            right: -8px;
+            width: 18px;
+            height: 18px;
+            cursor: nwse-resize;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2.5px solid rgba(255, 255, 255, 0.95);
+            border-radius: 3px;
+            z-index: 9999 !important;
+            display: none;
+            pointer-events: auto !important;
+            transition: all 0.12s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            touch-action: none;
+        }
+        .gate-pixel:hover .pixel-resize-handle {
+            display: block;
+        }
+        .pixel-resize-handle:hover {
+            background: rgba(0, 0, 0, 0.95);
+            transform: scale(1.15);
+        }
+        .pixel-resize-handle::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: -6px;
+            right: -6px;
+            bottom: -6px;
+            border-radius: 6px;
+            pointer-events: none;
+        }
+        .custom-container-wrapper {
+            position: absolute;
+            z-index: 2;
+            pointer-events: none;
+            touch-action: none;
+            will-change: transform, left, top, width, height;
+        }
+        .custom-container-header {
+            background: #6f42c1;
+            color: #fff;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            pointer-events: auto;
+            min-height: 32px;
+            cursor: grab;
+        }
+        .custom-container-header:active {
+            cursor: grabbing;
+        }
+        .custom-container-box {
+            background: rgba(111, 66, 193, 0.03);
+            border: 2px dashed #6f42c1;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            position: relative;
+            pointer-events: none;
+            will-change: height;
+        }
+        .custom-title-input {
+            background: rgba(0, 0, 0, 0.25);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-size: 11px;
+            font-weight: bold;
+            outline: none;
+            cursor: text;
+            user-select: text;
+            -webkit-user-select: text;
+            width: 90px;
+            pointer-events: auto;
+        }
+        .custom-title-input:focus {
+            background: rgba(0, 0, 0, 0.4);
+            border-color: #fff;
+            box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+        }
+        .resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 18px;
+            height: 18px;
+            cursor: nwse-resize;
+            background: linear-gradient(135deg, transparent 50%, #6f42c1 50%);
+            border-bottom-right-radius: 4px;
+            z-index: 3;
+            touch-action: none;
+            pointer-events: auto;
+        }
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: var(--toolbar-bg);
+            color: var(--text-color);
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            pointer-events: none;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+            border: 1px solid var(--border-color);
+            max-width: calc(100vw - 20px);
+            opacity: 0.8;
+        }
+        .wire-path {
+            stroke: #666;
+            stroke-width: 2.5;
+            fill: none;
+            cursor: pointer;
+            pointer-events: stroke;
+            transition: stroke 0.15s, stroke-width 0.15s;
+            will-change: stroke;
+        }
+        .wire-path.powered {
+            stroke: #28a745;
+            stroke-width: 3.5;
+        }
+        .wire-path:hover {
+            stroke: #dc3545 !important;
+            stroke-width: 5;
+        }
+        #ghost-gate {
+            position: absolute;
+            background: var(--gate-bg);
+            border: 2px dashed var(--gate-color, #007bff);
+            border-radius: 6px;
+            opacity: 0.9;
+            pointer-events: none;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            transform-origin: 0 0;
+            transition: none;
+            width: 140px;
+            height: auto;
+            min-width: 140px;
+            will-change: transform, left, top;
+        }
+        #ghost-gate .gate-header {
+            background: var(--gate-color, #007bff);
+            color: #fff;
+            padding: 4px 6px;
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            gap: 4px;
+            min-height: 26px;
+        }
+        #ghost-gate .gate-body {
+            background: var(--gate-bg);
+            border-bottom-left-radius: 6px;
+            border-bottom-right-radius: 6px;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: var(--text-color);
+        }
+        #ghost-gate.ghost-pixel {
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 0 !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            position: absolute;
+            z-index: 1000;
+            min-width: 40px !important;
+        }
+        #ghost-gate.ghost-pixel .gate-header {
+            display: none;
+        }
+        #ghost-gate.ghost-pixel .gate-body {
+            padding: 0 !important;
+            background: transparent !important;
+            border-radius: 0 !important;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none !important;
+        }
+        #ghost-gate .ghost-pixel-square {
+            width: 40px;
+            height: 40px;
+            background: var(--pixel-off);
+            border: none !important;
+            border-radius: 0 !important;
+            position: relative;
+            opacity: 0.6;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        #ghost-gate .ghost-pixel-square .port {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%) scale(0.7);
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #007bff;
+            border: 2px solid #fff;
+            opacity: 0.5;
+        }
+        #ghost-gate .ghost-pixel-square .ghost-resize-handle {
+            position: absolute;
+            bottom: -8px;
+            right: -8px;
+            width: 16px;
+            height: 16px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            border-radius: 2px;
+            opacity: 0.5;
+        }
+        #ic-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: var(--toolbar-bg);
+            color: var(--text-color);
+            padding: 18px;
+            border-radius: 8px;
+            width: 340px;
+            max-width: 90vw;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--border-color);
+        }
+        .ic-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 11px;
+        }
+        .ic-color-picker {
+            width: 24px;
+            height: 20px;
+            padding: 1px;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            background: var(--bg-color);
+            cursor: pointer;
+        }
+        .expand-hint {
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-left: 3px;
+            cursor: default;
+            pointer-events: none;
+        }
+        .custom-gate-ports {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-between;
+            gap: 6px;
+            padding: 2px 0;
+        }
+        .custom-gate-ports .port-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+        }
+        .custom-gate-ports .port-list .port-item {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 9px;
+            min-height: 20px;
+        }
+        .custom-gate-ports .port-list .port-item .port {
+            flex-shrink: 0;
+        }
+        .custom-gate-ports .port-list .port-label {
+            font-size: 8px;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+        .io-port-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            justify-content: space-between;
+        }
+        .io-port-row .io-label {
+            font-size: 9px;
+            opacity: 0.8;
+            min-width: 18px;
+        }
+        #toast-container {
+            position: fixed;
+            bottom: 50px;
+            right: 14px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-width: 280px;
+        }
+        .toast {
+            background: var(--toolbar-bg);
+            color: var(--text-color);
+            padding: 10px 14px;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            border-left: 4px solid #007bff;
+            font-size: 11px;
+            animation: slideIn 0.25s ease-out;
+            cursor: pointer;
+        }
+        .toast.success {
+            border-left-color: #28a745;
+        }
+        .toast.error {
+            border-left-color: #dc3545;
+        }
+        .toast.info {
+            border-left-color: #17a2b8;
+        }
+        .toast .toast-close {
+            float: right;
+            margin-left: 10px;
+            cursor: pointer;
+            opacity: 0.6;
+        }
+        .toast .toast-close:hover {
+            opacity: 1;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        #confirm-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        #confirm-modal .modal-box {
+            background: var(--toolbar-bg);
+            color: var(--text-color);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 380px;
+            width: 90%;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+        }
+        #confirm-modal .modal-box h3 {
+            margin-top: 0;
+            font-size: 15px;
+        }
+        #confirm-modal .modal-box .btn-row {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            margin-top: 14px;
+        }
+        #confirm-modal .modal-box .btn-row button {
+            padding: 5px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        #confirm-modal .modal-box .btn-row .btn-cancel {
+            background: #6c757d;
+            color: #fff;
+        }
+        #confirm-modal .modal-box .btn-row .btn-confirm {
+            background: #dc3545;
+            color: #fff;
+        }
+        #confirm-modal .modal-box .btn-row .btn-confirm:hover {
+            background: #c82333;
+        }
+        #confirm-modal .modal-box .btn-row .btn-cancel:hover {
+            background: #5a6268;
+        }
+        #file-input {
+            display: none;
+        }
+        /* Performance: reduce repaints */
+        .gate,
+        .gate-pixel,
+        .custom-container-wrapper,
+        #ghost-gate {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        /* scrollbar for toolbar */
+        #toolbar::-webkit-scrollbar {
+            height: 3px;
+        }
+        #toolbar::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toolbar">
+        <div style="font-weight:bold;font-size:12px;">Logic Sim</div>
+        <div class="toolbar-group">
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'INPUT')" ontouchstart="startGhostDrag(event,'INPUT')">Input</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'OUTPUT')" ontouchstart="startGhostDrag(event,'OUTPUT')">Output</div>
+        </div>
+        <div class="toolbar-group">
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'AND')" ontouchstart="startGhostDrag(event,'AND')">AND</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'OR')" ontouchstart="startGhostDrag(event,'OR')">OR</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'XOR')" ontouchstart="startGhostDrag(event,'XOR')">XOR</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'NOT')" ontouchstart="startGhostDrag(event,'NOT')">NOT</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'NAND')" ontouchstart="startGhostDrag(event,'NAND')">NAND</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'NOR')" ontouchstart="startGhostDrag(event,'NOR')">NOR</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'XNOR')" ontouchstart="startGhostDrag(event,'XNOR')">XNOR</div>
+            <div class="tool-btn" onmousedown="startGhostDrag(event,'DELAY')" ontouchstart="startGhostDrag(event,'DELAY')">DELAY</div>
+        </div>
+        <div class="toolbar-group" style="border-left:2px solid var(--border-color);padding-left:5px;">
+            <div class="tool-btn" style="background:#d97706;" onmousedown="startGhostDrag(event,'SCREEN')" ontouchstart="startGhostDrag(event,'SCREEN')">Pixel</div>
+        </div>
+        <div class="toolbar-group">
+            <div class="tool-btn" style="background:#6f42c1;" onmousedown="startGhostDrag(event,'CUSTOM_CONTAINER')" ontouchstart="startGhostDrag(event,'CUSTOM_CONTAINER')">+ Outline</div>
+        </div>
+        <div class="toolbar-group" id="custom-gates-toolbar"></div>
+        <div class="toolbar-group">
+            <button id="pause-btn" onclick="togglePause()" style="background:#d97706;">Pause</button>
+            <button onclick="stepSimulation()" style="background:#2563eb;">Step</button>
+            <label style="font-size:10px;cursor:pointer;white-space:nowrap;">
+                <input type="checkbox" id="snapCheck" checked /> Snap
+            </label>
+            <button onclick="resetView()" style="background:#4b5563;">Reset</button>
+            <button onclick="toggleTheme()" style="background:#6366f1;">Theme</button>
+            <button onclick="clearAll()" style="background:#dc3545;">Clear</button>
+        </div>
+        <div class="toolbar-group">
+            <button onclick="exportCircuit()" style="background:#28a745;">⬇ Export</button>
+            <button onclick="document.getElementById('file-input').click()" style="background:#17a2b8;">⬆ Import</button>
+            <input type="file" id="file-input" accept=".json" onchange="importCircuit(event)" />
+        </div>
+        <div class="toolbar-group">
+            <button onclick="openICManager()" style="background:#6f42c1;">IC Manager</button>
+        </div>
+    </div>
+
+    <div id="viewport" onmousedown="startPan(event)" ontouchstart="startTouchPanZoom(event)" onwheel="handleZoom(event)">
+        <div id="canvas">
+            <div id="grid-bg" onmousedown="startPan(event)" ontouchstart="startTouchPanZoom(event)"></div>
+            <svg id="wires">
+                <path id="temp-wire" d="" stroke="#e83e8c" stroke-width="3" stroke-dasharray="5,5" fill="none" visibility="hidden" />
+            </svg>
+        </div>
+    </div>
+
+    <div id="ghost-gate"></div>
+
+    <div id="ic-modal" onclick="closeICManagerOutside(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 style="margin-top:0;font-size:14px;">Custom ICs</h3>
+            <div id="ic-modal-list" style="max-height:200px;overflow-y:auto;margin-bottom:12px;"></div>
+            <div style="text-align:right;">
+                <button onclick="closeICManager()" style="background:#4b5563;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" onclick="closeConfirmOutside(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <h3 id="confirm-title">Confirm</h3>
+            <p id="confirm-message">Are you sure?</p>
+            <div class="btn-row">
+                <button class="btn-cancel" onclick="closeConfirm(false)">Cancel</button>
+                <button class="btn-confirm" onclick="closeConfirm(true)">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <div class="instructions">
+        • <strong>Click a wire</strong> to delete it.<br />
+        • <strong>Double‑click</strong> a custom gate to expand it.<br />
+        • <strong>Pixel</strong> gates snap to 20px grid &amp; stretch independently.
+    </div>
+
+    <script>
+        // ──────────────────────────────────────────────────────────────
+        //  HIGH PERFORMANCE LOGIC SIMULATOR
+        // ──────────────────────────────────────────────────────────────
+
+        // ─── state ────────────────────────────────────────────────────
+        let components = [];
+        let wires = [];
+        let customContainers = [];
+        let savedCustomGates = {};
+        let draggingWire = null;
+        let nextId = 1;
+        let isPaused = false;
+
+        let panX = 0,
+            panY = 0,
+            zoom = 1;
+        let isPanning = false;
+        let startPanX = 0,
+            startPanY = 0;
+        let initialPinchDistance = null,
+            initialZoom = 1,
+            pinchCenterX = 0,
+            pinchCenterY = 0;
+        let ghostType = null;
+
+        const viewport = document.getElementById('viewport');
+        const canvas = document.getElementById('canvas');
+        let svgWires = document.getElementById('wires');
+        const ghostGate = document.getElementById('ghost-gate');
+
+        // ─── performance: cached port positions ─────────────────────
+        let portPositions = {};
+        let portPositionsDirty = true;
+
+        function markPortPositionsDirty() { portPositionsDirty = true; }
+
+        function updatePortPositions() {
+            if (!portPositionsDirty) return;
+            portPositionsDirty = false;
+            const cRect = canvas.getBoundingClientRect();
+            const els = document.querySelectorAll('.port');
+            const len = els.length;
+            const newPos = {};
+            for (let i = 0; i < len; i++) {
+                const p = els[i];
+                const key = `${p.dataset.comp}-${p.dataset.type}-${p.dataset.port}`;
+                const rect = p.getBoundingClientRect();
+                newPos[key] = {
+                    x: (rect.left + rect.width / 2 - cRect.left) / zoom,
+                    y: (rect.top + rect.height / 2 - cRect.top) / zoom
+                };
+            }
+            portPositions = newPos;
+        }
+
+        // ─── gate colors ────────────────────────────────────────────
+        const GATE_COLORS = {
+            INPUT: '#2563eb',
+            OUTPUT: '#f59e0b',
+            AND: '#16a34a',
+            OR: '#8b5cf6',
+            XOR: '#ec4899',
+            NOT: '#ef4444',
+            NAND: '#0f766e',
+            NOR: '#7c3aed',
+            XNOR: '#0891b2',
+            DELAY: '#64748b',
+            SCREEN: '#d97706'
+        };
+
+        function getGateColor(comp) {
+            if (comp.isCustom) return (comp.def && comp.def.color) || '#6f42c1';
+            return GATE_COLORS[comp.type] || '#007bff';
+        }
+
+        function getGateColorByName(type, customDef) {
+            if (customDef && customDef.color) return customDef.color;
+            return GATE_COLORS[type] || '#6f42c1';
+        }
+
+        // ─── unified snapping ───────────────────────────────────────
+        const SNAP = 20;
+
+        function snapValue(v) {
+            if (!document.getElementById('snapCheck').checked) return v;
+            return Math.round(v / SNAP) * SNAP;
+        }
+
+        function snapPos(x, y) {
+            return { x: snapValue(x), y: snapValue(y) };
+        }
+
+        // ─── toast ────────────────────────────────────────────────────
+        function showToast(message, type = 'info', duration = 2500) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `
+                <span class="toast-close" onclick="this.parentElement.remove()">✕</span>
+                ${message}
+            `;
+            container.appendChild(toast);
+            setTimeout(() => { if (toast.parentElement) toast.remove(); }, duration);
+            toast.addEventListener('click', () => toast.remove());
+        }
+
+        // ─── confirm ──────────────────────────────────────────────────
+        let confirmResolve = null;
+
+        function showConfirm(title, message) {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('confirm-modal');
+                document.getElementById('confirm-title').textContent = title;
+                document.getElementById('confirm-message').textContent = message;
+                confirmResolve = resolve;
+                modal.style.display = 'flex';
+            });
+        }
+
+        function closeConfirm(result) {
+            const modal = document.getElementById('confirm-modal');
+            modal.style.display = 'none';
+            if (confirmResolve) { confirmResolve(result);
+                confirmResolve = null; }
+        }
+
+        function closeConfirmOutside(e) {
+            if (e.target.id === 'confirm-modal') closeConfirm(false);
+        }
+
+        // ─── export / import ─────────────────────────────────────────
+        function exportCircuit() {
+            const state = buildFullState();
+            const json = JSON.stringify(state, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `logic_circuit_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('Circuit exported!', 'success');
+        }
+
+        function importCircuit(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const state = JSON.parse(e.target.result);
+                    if (!state.components || !state.wires) {
+                        showToast('Invalid file format.', 'error');
+                        return;
+                    }
+                    showConfirm('Import Circuit', 'This will replace your current circuit. Continue?')
+                        .then((confirmed) => {
+                            if (confirmed) {
+                                document.querySelectorAll('.gate, .custom-container-wrapper').forEach(el => el
+                                .remove());
+                                components = [];
+                                wires = [];
+                                customContainers = [];
+                                savedCustomGates = {};
+                                restoreFullState(state);
+                                showToast('Circuit imported!', 'success');
+                                saveToLocalStorage();
+                            }
+                        });
+                } catch (err) {
+                    showToast('Failed to import: ' + err.message, 'error');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // ─── full state ──────────────────────────────────────────────
+        function buildFullState() {
+            return {
+                version: '3.0',
+                components,
+                wires,
+                customContainers,
+                savedCustomGates,
+                nextId,
+                panX,
+                panY,
+                zoom,
+                isDark: document.body.classList.contains('dark-theme')
+            };
+        }
+
+        function restoreFullState(state) {
+            components = state.components || [];
+            wires = state.wires || [];
+            customContainers = state.customContainers || [];
+            savedCustomGates = state.savedCustomGates || {};
+            nextId = state.nextId || 1;
+            panX = state.panX || 0;
+            panY = state.panY || 0;
+            zoom = state.zoom || 1;
+            if (state.isDark) {
+                document.body.classList.add('dark-theme');
+                document.body.classList.remove('light-theme');
+            } else {
+                document.body.classList.remove('dark-theme');
+                document.body.classList.add('light-theme');
+            }
+
+            components.forEach(comp => {
+                if (comp.type === 'DELAY' && !comp.delayQueue) {
+                    comp.delayQueue = new Array(comp.delayVal || 3).fill(0);
+                }
+                if (comp.isCustom && comp.type && savedCustomGates[comp.type]) {
+                    comp.def = savedCustomGates[comp.type];
+                }
+                if (comp.isCustom && comp.delayStates) {
+                    Object.keys(comp.delayStates).forEach(k => {
+                        const st = comp.delayStates[k];
+                        if (!st.queue) st.queue = new Array(3).fill(0);
+                        if (st.ptr === undefined) st.ptr = 0;
+                    });
+                }
+                if (comp.subComps) {
+                    comp.subComps.forEach(sc => {
+                        if (sc.isCustom && sc.type && savedCustomGates[sc.type]) {
+                            sc.def = savedCustomGates[sc.type];
+                        }
+                        if (sc.type === 'DELAY' && !sc.delayQueue) {
+                            sc.delayQueue = new Array(sc.delayVal || 3).fill(0);
+                        }
+                    });
+                }
+                if (comp.type === 'SCREEN') {
+                    comp.pixelWidth = comp.pixelWidth || 40;
+                    comp.pixelHeight = comp.pixelHeight || 40;
+                    comp.pixelSize = undefined;
+                }
+            });
+
+            for (const [name, def] of Object.entries(savedCustomGates)) {
+                if (def.innerComps) {
+                    def.innerComps.forEach(sc => {
+                        if (sc.isCustom && sc.type && savedCustomGates[sc.type]) {
+                            sc.def = savedCustomGates[sc.type];
+                        }
+                    });
+                }
+            }
+
+            customContainers.forEach(cont => renderCustomContainer(cont));
+            components.forEach(comp => renderComponent(comp));
+            updateTransform();
+            updateCustomGatesToolbar();
+            svgWires = document.getElementById('wires');
+            markPortPositionsDirty();
+            drawWires();
+            runSimulation();
+
+            components.forEach(comp => {
+                if (comp.type === 'INPUT') {
+                    const btn = document.getElementById(`sw-${comp.id}`);
+                    if (btn) {
+                        btn.classList.toggle('active', comp.state === 1);
+                        btn.innerText = comp.state === 1 ? 'ON' : 'OFF';
+                    }
+                }
+            });
+        }
+
+        // ─── localStorage ────────────────────────────────────────────
+        function saveToLocalStorage() {
+            const state = buildFullState();
+            try { localStorage.setItem('logic_sim_save_state_v4', JSON.stringify(state)); } catch (_) {}
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                let raw = localStorage.getItem('logic_sim_save_state_v4') ||
+                    localStorage.getItem('logic_sim_save_state_v3') ||
+                    localStorage.getItem('logic_sim_save_state_v2') ||
+                    localStorage.getItem('logic_sim_save_state');
+                if (!raw) return false;
+                const state = JSON.parse(raw);
+                components = state.components || [];
+                wires = state.wires || [];
+                customContainers = state.customContainers || [];
+                savedCustomGates = state.savedCustomGates || {};
+                nextId = state.nextId || 1;
+                panX = state.panX || 0;
+                panY = state.panY || 0;
+                zoom = state.zoom || 1;
+                if (state.isDark) {
+                    document.body.classList.remove('light-theme');
+                    document.body.classList.add('dark-theme');
+                }
+                components.forEach(comp => {
+                    if (comp.isCustom && comp.type && savedCustomGates[comp.type]) {
+                        comp.def = savedCustomGates[comp.type];
+                    }
+                    if (comp.subComps) {
+                        comp.subComps.forEach(sc => {
+                            if (sc.isCustom && sc.type && savedCustomGates[sc.type]) {
+                                sc.def = savedCustomGates[sc.type];
+                            }
+                        });
+                    }
+                    if (comp.type === 'DELAY' && !comp.delayQueue) {
+                        comp.delayQueue = new Array(comp.delayVal || 3).fill(0);
+                    }
+                    if (comp.type === 'SCREEN') {
+                        comp.pixelWidth = comp.pixelWidth || 40;
+                        comp.pixelHeight = comp.pixelHeight || 40;
+                        comp.pixelSize = undefined;
+                    }
+                });
+                for (const [name, def] of Object.entries(savedCustomGates)) {
+                    if (def.innerComps) {
+                        def.innerComps.forEach(sc => {
+                            if (sc.isCustom && sc.type && savedCustomGates[sc.type]) {
+                                sc.def = savedCustomGates[sc.type];
+                            }
+                        });
+                    }
+                }
+                return true;
+            } catch (_) { return false; }
+        }
+
+        // ─── transform ───────────────────────────────────────────────
+        function updateTransform() {
+            canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+        }
+
+        function applyZoom(newZoom, originX, originY) {
+            newZoom = Math.max(0.1, Math.min(5, newZoom));
+            const rect = viewport.getBoundingClientRect();
+            const mx = originX - rect.left,
+                my = originY - rect.top;
+            panX = mx - (mx - panX) * (newZoom / zoom);
+            panY = my - (my - panY) * (newZoom / zoom);
+            zoom = newZoom;
+            updateTransform();
+            markPortPositionsDirty();
+            saveToLocalStorage();
+        }
+
+        function startPan(e) {
+            if (e.target.closest('.gate') || e.target.closest('.custom-container-wrapper') || e.target.closest(
+                    '#toolbar')) return;
+            isPanning = true;
+            startPanX = e.clientX - panX;
+            startPanY = e.clientY - panY;
+            e.stopPropagation();
+        }
+
+        function startTouchPanZoom(e) {
+            if (e.target.closest('.gate') || e.target.closest('.custom-container-wrapper') || e.target.closest(
+                '#toolbar')) return;
+            if (e.touches.length === 2) {
+                initialPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e
+                    .touches[1].clientY);
+                initialZoom = zoom;
+                pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                isPanning = false;
+            } else if (e.touches.length === 1) {
+                isPanning = true;
+                startPanX = e.touches[0].clientX - panX;
+                startPanY = e.touches[0].clientY - panY;
+            }
+            e.stopPropagation();
+        }
+
+        function handleZoom(e) {
+            e.preventDefault();
+            const zf = 1.1;
+            const newZoom = e.deltaY < 0 ? zoom * zf : zoom / zf;
+            applyZoom(newZoom, e.clientX, e.clientY);
+        }
+
+        function resetView() {
+            panX = 0;
+            panY = 0;
+            zoom = 1;
+            updateTransform();
+            markPortPositionsDirty();
+            saveToLocalStorage();
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('light-theme');
+            document.body.classList.toggle('dark-theme');
+            saveToLocalStorage();
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = document.getElementById('pause-btn');
+            btn.innerText = isPaused ? 'Resume' : 'Pause';
+            btn.style.background = isPaused ? '#16a34a' : '#d97706';
+        }
+
+        // ─── ghost drag ──────────────────────────────────────────────
+        function startGhostDrag(e, type) {
+            e.preventDefault();
+            ghostType = type;
+            let headerTitle = type,
+                bodyContent = '',
+                w = 140,
+                h = 'auto';
+            let gateColor = '#6f42c1';
+
+            if (type === 'CUSTOM_CONTAINER') {
+                headerTitle = 'Outline Container';
+                bodyContent = '<div style="font-size:10px;color:#6f42c1;text-align:center;margin-top:30px;">Grid-Matched Outline</div>';
+                w = 200;
+                h = 150;
+                gateColor = '#6f42c1';
+            } else if (savedCustomGates[type]) {
+                const def = savedCustomGates[type];
+                gateColor = def.color || '#6f42c1';
+                let rows = '';
+                const maxLen = Math.max(def.inputInitials.length, def.outputInitials.length);
+                for (let i = 0; i < maxLen; i++) {
+                    const inInit = def.inputInitials[i] || '';
+                    const outInit = def.outputInitials[i] || '';
+                    const inPort = inInit ?
+                        `<div class="port" style="display:inline-flex;vertical-align:middle;margin-right:3px;"></div>` :
+                        '';
+                    const outPort = outInit ?
+                        `<div class="port output" style="display:inline-flex;vertical-align:middle;margin-left:3px;"></div>` :
+                        '';
+                    if (inPort || outPort) {
+                        rows += `
+                            <div style="display:flex;justify-content:space-between;font-size:9px;margin-bottom:3px;align-items:center;">
+                                <div>${inPort}${inInit ? `<span style="font-size:7px;opacity:0.7;">${inInit}</span>` : ''}</div>
+                                <div>${outPort}${outInit ? `<span style="font-size:7px;opacity:0.7;">${outInit}</span>` : ''}</div>
+                            </div>`;
+                    }
+                }
+                bodyContent = rows;
+                h = Math.max(50, Math.max(def.inputInitials.length, def.outputInitials.length) * 22 + 12);
+            } else {
+                gateColor = GATE_COLORS[type] || '#6f42c1';
+                if (type === 'INPUT') {
+                    bodyContent =
+                        `<div style="display:flex;justify-content:space-between;align-items:center;"><button class="switch-btn">OFF</button><div class="port output"></div></div>`;
+                } else if (type === 'OUTPUT') {
+                    bodyContent =
+                        `<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><div class="bulb"></div></div>`;
+                } else if (type === 'NOT') {
+                    bodyContent =
+                        `<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><span style="font-size:10px;">NOT</span><div class="port output"></div></div>`;
+                } else if (type === 'DELAY') {
+                    bodyContent =
+                        `<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port"></div><input type="number" value="3" style="width:28px;font-size:10px;" disabled><div class="port output"></div></div>`;
+                } else if (type === 'SCREEN') {
+                    bodyContent = `
+                        <div class="ghost-pixel-square" style="width:40px;height:40px;background:var(--pixel-off);border:none;border-radius:0;position:relative;">
+                            <div class="port" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(0.7);width:12px;height:12px;border-radius:50%;background:#007bff;border:2px solid #fff;opacity:0.5;"></div>
+                            <div class="ghost-resize-handle" style="position:absolute;bottom:-8px;right:-8px;width:16px;height:16px;background:rgba(0,0,0,0.6);border:2px solid rgba(255,255,255,0.6);border-radius:2px;"></div>
+                        </div>
+                    `;
+                    w = 40;
+                    h = 40;
+                } else {
+                    bodyContent = `
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div><div class="port" style="margin-bottom:3px;"></div><div class="port"></div></div>
+                            <span style="font-size:10px;font-weight:bold;">${type}</span>
+                            <div class="port output"></div>
+                        </div>`;
+                }
+            }
+
+            ghostGate.style.setProperty('--gate-color', gateColor);
+            ghostGate.style.width = w + 'px';
+            if (typeof h === 'number') {
+                ghostGate.style.height = h + 'px';
+            } else {
+                ghostGate.style.height = 'auto';
+            }
+
+            ghostGate.className = '';
+            if (type === 'SCREEN') {
+                ghostGate.classList.add('ghost-pixel');
+            }
+
+            ghostGate.innerHTML = `
+                <div class="${type === 'CUSTOM_CONTAINER' ? 'custom-container-header' : 'gate-header'}" style="background:${gateColor};">
+                    <span>${headerTitle}</span>
+                    <button class="delete-btn" style="cursor:default;">×</button>
+                </div>
+                <div class="${type === 'CUSTOM_CONTAINER' ? 'custom-container-box' : 'gate-body'}">${bodyContent}</div>`;
+            ghostGate.style.display = 'block';
+
+            const cx = e.clientX || (e.touches && e.touches[0].clientX) || 0;
+            const cy = e.clientY || (e.touches && e.touches[0].clientY) || 0;
+            updateGhostPosition(cx, cy, w, typeof h === 'number' ? h : 70);
+        }
+
+        function updateGhostPosition(cx, cy, w, h) {
+            if (!ghostType) return;
+            const rect = viewport.getBoundingClientRect();
+            let cX = (cx - rect.left - panX) / zoom;
+            let cY = (cy - rect.top - panY) / zoom;
+            cX -= w / 2;
+            cY -= h / 2;
+
+            // Unified snapping for all ghost types
+            const snapped = snapPos(cX, cY);
+            cX = snapped.x;
+            cY = snapped.y;
+
+            const sx = cX * zoom + panX + rect.left;
+            const sy = cY * zoom + panY + rect.top;
+            ghostGate.style.left = sx + 'px';
+            ghostGate.style.top = sy + 'px';
+            ghostGate.style.transform = `scale(${zoom})`;
+            ghostGate.dataset.canvasX = cX;
+            ghostGate.dataset.canvasY = cY;
+        }
+
+        // ─── mouse / touch handlers ──────────────────────────────────
+        window.addEventListener('mousemove', (e) => {
+            if (isPanning) { panX = e.clientX - startPanX;
+                panY = e.clientY - startPanY;
+                updateTransform();
+                markPortPositionsDirty(); }
+            handleMove(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && initialPinchDistance !== null) {
+                e.preventDefault();
+                const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1]
+                    .clientY);
+                const nz = initialZoom * (d / initialPinchDistance);
+                pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                applyZoom(nz, pinchCenterX, pinchCenterY);
+                return;
+            }
+            if (e.touches.length === 1) {
+                const t = e.touches[0];
+                if (isPanning) { panX = t.clientX - startPanX;
+                    panY = t.clientY - startPanY;
+                    updateTransform();
+                    markPortPositionsDirty(); }
+                handleMove(t.clientX, t.clientY);
+            }
+        }, { passive: false });
+
+        function handleMove(cx, cy) {
+            if (ghostType) {
+                let w = ghostType === 'CUSTOM_CONTAINER' ? 200 : 140;
+                let h = ghostType === 'CUSTOM_CONTAINER' ? 150 : 70;
+                if (savedCustomGates[ghostType]) {
+                    const def = savedCustomGates[ghostType];
+                    w = 140;
+                    h = Math.max(50, Math.max(def.inputInitials.length, def.outputInitials.length) * 22 + 12);
+                }
+                if (ghostType === 'SCREEN') {
+                    w = 40;
+                    h = 40;
+                }
+                updateGhostPosition(cx, cy, w, h);
+            }
+            if (draggingWire) updateTempWire(cx, cy);
+        }
+
+        window.addEventListener('mouseup', (e) => handleEnd(e.clientX, e.clientY));
+        window.addEventListener('touchend', (e) => {
+            initialPinchDistance = null;
+            if (e.changedTouches.length) {
+                const t = e.changedTouches[0];
+                handleEnd(t.clientX, t.clientY);
+            }
+        });
+
+        function handleEnd(cx, cy) {
+            if (isPanning) saveToLocalStorage();
+            isPanning = false;
+
+            if (ghostType) {
+                ghostGate.style.display = 'none';
+                const rect = viewport.getBoundingClientRect();
+                let x = parseFloat(ghostGate.dataset.canvasX) || 0;
+                let y = parseFloat(ghostGate.dataset.canvasY) || 0;
+                if (cx >= rect.left && cx <= rect.right && cy >= rect.top && cy <= rect.bottom) {
+                    let w = ghostType === 'CUSTOM_CONTAINER' ? 200 : 140;
+                    let h = ghostType === 'CUSTOM_CONTAINER' ? 150 : 70;
+                    if (savedCustomGates[ghostType]) {
+                        const def = savedCustomGates[ghostType];
+                        w = 140;
+                        h = Math.max(50, Math.max(def.inputInitials.length, def.outputInitials.length) * 22 + 12);
+                    }
+                    if (ghostType === 'SCREEN') {
+                        w = 40;
+                        h = 40;
+                    }
+                    if (ghostType === 'CUSTOM_CONTAINER') {
+                        spawnCustomContainer(x, y, 200, 150);
+                    } else if (savedCustomGates[ghostType]) {
+                        spawnCustomGateInstance(ghostType, x, y);
+                    } else {
+                        spawnComponentAt(ghostType, x, y);
+                    }
+                    saveToLocalStorage();
+                }
+                ghostType = null;
+            }
+
+            if (draggingWire) {
+                const target = document.elementFromPoint(cx, cy);
+                if (target && target.classList.contains('port') && target.getAttribute('data-type') === 'in') {
+                    const toComp = parseInt(target.getAttribute('data-comp'));
+                    const toPort = parseInt(target.getAttribute('data-port'));
+                    wires = wires.filter(w => !(w.toComp === toComp && w.toPort === toPort));
+                    wires.push({ fromComp: draggingWire.compId, fromPort: draggingWire.portIndex, toComp, toPort });
+                    runSimulation();
+                    drawWires();
+                    saveToLocalStorage();
+                }
+                resetWiring();
+            }
+        }
+
+        // ─── spawn primitives ────────────────────────────────────────
+        function spawnComponentAt(type, x, y) {
+            const id = nextId++;
+            const snapped = snapPos(x, y);
+            const comp = {
+                id,
+                type,
+                x: snapped.x,
+                y: snapped.y,
+                state: 0,
+                outputVal: 0,
+                customLabel: '',
+                delayVal: type === 'DELAY' ? 3 : undefined,
+                delayQueue: type === 'DELAY' ? new Array(3).fill(0) : undefined,
+                pixelWidth: type === 'SCREEN' ? 40 : undefined,
+                pixelHeight: type === 'SCREEN' ? 40 : undefined
+            };
+            if (type === 'INPUT' || type === 'OUTPUT' || type === 'SCREEN') {
+                comp.inputs = [0];
+            } else if (type === 'NOT' || type === 'DELAY') {
+                comp.inputs = [0];
+            } else {
+                comp.inputs = [0, 0];
+            }
+            components.push(comp);
+            renderComponent(comp);
+            runSimulation();
+            saveToLocalStorage();
+        }
+
+        function spawnCustomGateInstance(gateName, x, y) {
+            const def = savedCustomGates[gateName];
+            if (!def) return;
+            const id = nextId++;
+            const snapped = snapPos(x, y);
+            const comp = {
+                id,
+                type: gateName,
+                isCustom: true,
+                def: def,
+                x: snapped.x,
+                y: snapped.y,
+                inputs: new Array(def.inputsCount).fill(0),
+                outputVal: 0,
+                outputsArray: new Array(def.outputsCount).fill(0),
+                subComps: JSON.parse(JSON.stringify(def.innerComps)),
+                subWires: def.innerWires.slice(),
+                delayStates: {}
+            };
+
+            comp.subComps.forEach(sc => {
+                if (sc.isCustom && sc.type && savedCustomGates[sc.type]) {
+                    sc.def = savedCustomGates[sc.type];
+                }
+                if (sc.type === 'DELAY') {
+                    const val = sc.delayVal || 3;
+                    sc.delayQueue = new Array(val).fill(0);
+                    if (!comp.delayStates) comp.delayStates = {};
+                    comp.delayStates[sc.id] = { queue: new Array(val).fill(0), ptr: 0 };
+                }
+                if (sc.type === 'SCREEN') {
+                    sc.pixelWidth = sc.pixelWidth || 40;
+                    sc.pixelHeight = sc.pixelHeight || 40;
+                }
+            });
+
+            components.push(comp);
+            renderComponent(comp);
+            runSimulation();
+            saveToLocalStorage();
+        }
+
+        function spawnCustomContainer(x, y, width, height) {
+            const id = nextId++;
+            const snapped = snapPos(x, y);
+            const cont = {
+                id,
+                x: snapped.x,
+                y: snapped.y,
+                width: snapValue(width),
+                height: snapValue(height),
+                title: `CustomIC${id}`
+            };
+            customContainers.push(cont);
+            renderCustomContainer(cont);
+            saveToLocalStorage();
+        }
+
+        function getInnerComponents(cont) {
+            const result = [];
+            const els = document.querySelectorAll('.gate');
+            const cRect = canvas.getBoundingClientRect();
+            const scale = zoom;
+            for (let i = 0; i < els.length; i++) {
+                const el = els[i];
+                const id = parseInt(el.id.replace('comp-', ''));
+                const comp = components.find(c => c.id === id);
+                if (!comp) continue;
+                const l = parseFloat(el.style.left) || 0;
+                const t = parseFloat(el.style.top) || 0;
+                const w = el.offsetWidth || 140;
+                const h = el.offsetHeight || 60;
+                const cx = (l - panX) / scale;
+                const cy = (t - panY) / scale;
+                if (cx >= cont.x && (cx + w) <= (cont.x + cont.width) &&
+                    cy >= cont.y + 35 && (cy + h) <= (cont.y + 35 + cont.height)) {
+                    result.push(comp);
+                }
+            }
+            return result;
+        }
+
+        // ─── render component ────────────────────────────────────────
+        function renderComponent(comp) {
+            const el = document.createElement('div');
+            el.className = 'gate';
+            el.id = `comp-${comp.id}`;
+            el.style.setProperty('--gate-color', getGateColor(comp));
+
+            if (comp.type === 'SCREEN') {
+                el.classList.add('gate-pixel');
+                const w = comp.pixelWidth || 40;
+                const h = comp.pixelHeight || 40;
+                el.style.width = w + 'px';
+                el.style.height = h + 'px';
+                el.style.minWidth = w + 'px';
+                el.style.minHeight = h + 'px';
+                el.style.left = Math.round(comp.x) + 'px';
+                el.style.top = Math.round(comp.y) + 'px';
+                el.style.transform = 'translateZ(0)';
+                el.style.webkitTransform = 'translateZ(0)';
+            } else {
+                el.style.width = '140px';
+                el.style.minWidth = '140px';
+                el.style.height = 'auto';
+                el.style.left = comp.x + 'px';
+                el.style.top = comp.y + 'px';
+            }
+
+            let bodyContent = '';
+            if (comp.isCustom) {
+                const inList = comp.def.inputInitials || [];
+                const outList = comp.def.outputInitials || [];
+                let inHtml = inList.map((init, i) => `
+                    <div class="port-item">
+                        <div class="port" id="port-${comp.id}-in-${i}" data-comp="${comp.id}" data-type="in" data-port="${i}"></div>
+                        <span class="port-label">${init || ''}</span>
+                    </div>
+                `).join('');
+                let outHtml = outList.map((init, i) => `
+                    <div class="port-item">
+                        <div class="port output" id="port-${comp.id}-out-${i}" data-comp="${comp.id}" data-type="out" data-port="${i}"></div>
+                        <span class="port-label">${init || ''}</span>
+                    </div>
+                `).join('');
+                bodyContent = `
+                    <div class="custom-gate-ports">
+                        <div class="port-list">${inHtml || '<div style="font-size:8px;color:gray;opacity:0.5;">no inputs</div>'}</div>
+                        <div class="port-list" style="text-align:right;">${outHtml || '<div style="font-size:8px;color:gray;opacity:0.5;">no outputs</div>'}</div>
+                    </div>
+                `;
+            } else if (comp.type === 'INPUT') {
+                const label = (comp.customLabel || '').trim() || 'IN';
+                bodyContent = `
+                    <div class="io-port-row">
+                        <button class="switch-btn ${comp.state === 1 ? 'active' : ''}" id="sw-${comp.id}">${comp.state === 1 ? 'ON' : 'OFF'}</button>
+                        <div style="display:flex;align-items:center;gap:3px;">
+                            <div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div>
+                            <span class="io-label">${label}</span>
+                        </div>
+                    </div>
+                `;
+            } else if (comp.type === 'OUTPUT') {
+                const label = (comp.customLabel || '').trim() || 'OUT';
+                bodyContent = `
+                    <div class="io-port-row" style="flex-direction:row-reverse;">
+                        <div class="bulb" id="bulb-${comp.id}"></div>
+                        <div style="display:flex;align-items:center;gap:3px;">
+                            <div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div>
+                            <span class="io-label">${label}</span>
+                        </div>
+                    </div>
+                `;
+            } else if (comp.type === 'NOT') {
+                bodyContent =
+                    `<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><span style="font-size:10px;font-weight:bold;">NOT</span><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`;
+            } else if (comp.type === 'DELAY') {
+                bodyContent =
+                    `<div style="display:flex;justify-content:space-between;align-items:center;"><div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div><input type="number" min="1" max="99" value="${comp.delayVal}" class="delay-input" id="delay-val-${comp.id}"><div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div></div>`;
+            } else if (comp.type === 'SCREEN') {
+                const w = comp.pixelWidth || 40;
+                const h = comp.pixelHeight || 40;
+                bodyContent = `
+                    <div style="position:relative;display:inline-block;width:${w}px;height:${h}px;">
+                        <div class="pixel-square" id="pixel-${comp.id}">
+                            <div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div>
+                        </div>
+                        <button class="pixel-delete-btn" onclick="removeComponent(${comp.id})">✕</button>
+                        <div class="pixel-resize-handle" onmousedown="startResizePixel(event, ${comp.id})" ontouchstart="startResizePixel(event, ${comp.id})"></div>
+                    </div>
+                `;
+                el.innerHTML = `
+                    <div class="gate-body" style="padding:0;background:transparent;display:flex;align-items:center;justify-content:center;border-radius:0;width:100%;height:100%;">
+                        ${bodyContent}
+                    </div>`;
+                el.addEventListener('mousedown', (e) => {
+                    if (!e.target.classList.contains('pixel-delete-btn') &&
+                        !e.target.classList.contains('pixel-resize-handle') &&
+                        !e.target.classList.contains('port')) {
+                        startDragGate(e, comp.id);
+                    }
+                });
+                el.addEventListener('touchstart', (e) => {
+                    if (!e.target.classList.contains('pixel-delete-btn') &&
+                        !e.target.classList.contains('pixel-resize-handle') &&
+                        !e.target.classList.contains('port')) {
+                        startDragGate(e, comp.id);
+                    }
+                });
+                canvas.appendChild(el);
+                markPortPositionsDirty();
+                return;
+            } else {
+                bodyContent = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div style="display:flex;flex-direction:column;gap:4px;">
+                            <div class="port" id="port-${comp.id}-in-0" data-comp="${comp.id}" data-type="in" data-port="0"></div>
+                            <div class="port" id="port-${comp.id}-in-1" data-comp="${comp.id}" data-type="in" data-port="1"></div>
+                        </div>
+                        <span style="font-size:10px;font-weight:bold;">${comp.type}</span>
+                        <div class="port output" id="port-${comp.id}-out-0" data-comp="${comp.id}" data-type="out" data-port="0"></div>
+                    </div>`;
+            }
+
+            let headerRight =
+                `<button class="delete-btn" onclick="removeComponent(${comp.id})" ontouchend="removeComponent(${comp.id})">×</button>`;
+            if (comp.type === 'INPUT' || comp.type === 'OUTPUT') {
+                headerRight = `
+                    <div style="display:flex;align-items:center;gap:3px;">
+                        <input type="text" class="port-label-input" placeholder="Name" value="${comp.customLabel || ''}" id="label-${comp.id}">
+                        <button class="delete-btn" onclick="removeComponent(${comp.id})" ontouchend="removeComponent(${comp.id})">×</button>
+                    </div>`;
+            }
+            let titleSpan = `<span>${comp.type}</span>`;
+            if (comp.isCustom) {
+                titleSpan =
+                    `<span>${comp.type} <span class="expand-hint">⤵ expand</span></span>`;
+            }
+            el.innerHTML = `
+                <div class="gate-header" onmousedown="startDragGate(event,${comp.id})" ontouchstart="startDragGate(event,${comp.id})" ${comp.isCustom ? 'ondblclick="expandCustomGate('+comp.id+')"' : ''}>
+                    ${titleSpan}
+                    ${headerRight}
+                </div>
+                <div class="gate-body">${bodyContent}</div>`;
+
+            if (comp.type === 'INPUT') {
+                const btn = el.querySelector(`#sw-${comp.id}`);
+                const toggle = (e) => { e.preventDefault();
+                    e.stopPropagation();
+                    toggleInput(comp.id); };
+                btn.addEventListener('click', toggle);
+                btn.addEventListener('touchstart', toggle, { passive: false });
+            }
+
+            if (comp.type === 'INPUT' || comp.type === 'OUTPUT') {
+                const inp = el.querySelector(`#label-${comp.id}`);
+                inp.addEventListener('input', (e) => {
+                    comp.customLabel = e.target.value;
+                    const labelSpan = el.querySelector('.io-label');
+                    if (labelSpan) labelSpan.innerText = (comp.customLabel || '').trim() || (comp.type ===
+                        'INPUT' ? 'IN' : 'OUT');
+                    saveToLocalStorage();
+                });
+                inp.addEventListener('mousedown', e => e.stopPropagation());
+                inp.addEventListener('touchstart', e => e.stopPropagation());
+            }
+
+            if (comp.type === 'DELAY') {
+                const dInp = el.querySelector(`#delay-val-${comp.id}`);
+                dInp.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    let v = parseInt(dInp.value) || 1;
+                    v = Math.max(1, Math.min(99, v));
+                    comp.delayVal = v;
+                    comp.delayQueue = new Array(v).fill(0);
+                    saveToLocalStorage();
+                });
+                dInp.addEventListener('mousedown', e => e.stopPropagation());
+                dInp.addEventListener('touchstart', e => e.stopPropagation());
+            }
+
+            el.querySelectorAll('.port.output, .pixel-square .port').forEach(portEl => {
+                if (portEl.dataset.type === 'out') {
+                    const startWire = (cx, cy) => {
+                        const cid = parseInt(portEl.getAttribute('data-comp'));
+                        const pidx = parseInt(portEl.getAttribute('data-port'));
+                        draggingWire = { compId: cid, portIndex: pidx, el: portEl };
+                        document.getElementById('temp-wire').setAttribute('visibility', 'visible');
+                        updateTempWire(cx, cy);
+                    };
+                    portEl.onmousedown = (e) => { e.stopPropagation();
+                        startWire(e.clientX, e.clientY); };
+                    portEl.ontouchstart = (e) => { e.stopPropagation();
+                        startWire(e.touches[0].clientX, e.touches[0].clientY); };
+                }
+            });
+
+            canvas.appendChild(el);
+            markPortPositionsDirty();
+        }
+
+        // ─── pixel resize: independent width & height ──────────────
+        function startResizePixel(event, id) {
+            event.stopPropagation();
+            event.preventDefault();
+            const comp = components.find(c => c.id === id);
+            if (!comp || comp.type !== 'SCREEN') return;
+
+            const startX = event.clientX || (event.touches && event.touches[0].clientX);
+            const startY = event.clientY || (event.touches && event.touches[0].clientY);
+            const startWidth = comp.pixelWidth || 40;
+            const startHeight = comp.pixelHeight || 40;
+
+            const onMove = (cx, cy) => {
+                const dx = (cx - startX) / zoom;
+                const dy = (cy - startY) / zoom;
+                let newWidth = Math.max(20, Math.round((startWidth + dx) / SNAP) * SNAP);
+                let newHeight = Math.max(20, Math.round((startHeight + dy) / SNAP) * SNAP);
+                comp.pixelWidth = newWidth;
+                comp.pixelHeight = newHeight;
+                const el = document.getElementById(`comp-${id}`);
+                if (el) {
+                    el.style.width = newWidth + 'px';
+                    el.style.height = newHeight + 'px';
+                    el.style.minWidth = newWidth + 'px';
+                    el.style.minHeight = newHeight + 'px';
+                }
+                const pixelContainer = el?.querySelector('.gate-body > div');
+                if (pixelContainer) {
+                    pixelContainer.style.width = newWidth + 'px';
+                    pixelContainer.style.height = newHeight + 'px';
+                }
+                markPortPositionsDirty();
+                drawWires();
+            };
+
+            const onEnd = () => {
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onEnd);
+                window.removeEventListener('touchmove', onTouchMove);
+                window.removeEventListener('touchend', onEnd);
+                saveToLocalStorage();
+            };
+
+            const onMouseMove = (e) => onMove(e.clientX, e.clientY);
+            const onTouchMove = (e) => { if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY); };
+
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onTouchMove);
+            window.addEventListener('touchend', onEnd);
+        }
+
+        // ─── expand custom gate ──────────────────────────────────────
+        function expandCustomGate(compId) {
+            const comp = components.find(c => c.id === compId);
+            if (!comp || !comp.isCustom) return;
+
+            const def = savedCustomGates[comp.type];
+            if (!def) {
+                showToast(`Definition for "${comp.type}" not found.`, 'error');
+                return;
+            }
+
+            const subComps = comp.subComps;
+            let minX = Infinity,
+                minY = Infinity,
+                maxX = -Infinity,
+                maxY = -Infinity;
+            subComps.forEach(sc => {
+                const w = 140,
+                    h = 60;
+                const sx = sc.x;
+                const sy = sc.y;
+                if (sx < minX) minX = sx;
+                if (sy < minY) minY = sy;
+                if (sx + w > maxX) maxX = sx + w;
+                if (sy + h > maxY) maxY = sy + h;
+            });
+            if (!isFinite(minX)) {
+                showToast('No internal components to expand.', 'error');
+                return;
+            }
+
+            const savedContX = minX - 20;
+            const savedContY = minY - 20 - 35;
+            const offsetX = comp.x - savedContX;
+            const offsetY = comp.y - savedContY;
+
+            const shiftedSubComps = subComps.map(sc => ({
+                ...sc,
+                x: sc.x + offsetX,
+                y: sc.y + offsetY,
+                def: sc.isCustom && sc.type ? savedCustomGates[sc.type] : undefined
+            }));
+
+            let newMinX = Infinity,
+                newMinY = Infinity,
+                newMaxX = -Infinity,
+                newMaxY = -Infinity;
+            shiftedSubComps.forEach(sc => {
+                const w = 140,
+                    h = 60;
+                const sx = sc.x;
+                const sy = sc.y;
+                if (sx < newMinX) newMinX = sx;
+                if (sy < newMinY) newMinY = sy;
+                if (sx + w > newMaxX) newMaxX = sx + w;
+                if (sy + h > newMaxY) newMaxY = sy + h;
+            });
+
+            const sidePad = 40;
+            const topPad = 0;
+            const bottomPad = 40;
+            const contW = snapValue((newMaxX - newMinX) + sidePad * 2);
+            const contH = snapValue((newMaxY - newMinY) + topPad + bottomPad + 35);
+            const centerX = (newMinX + newMaxX) / 2;
+            const contX = snapValue(centerX - contW / 2);
+            const contY = snapValue(newMinY - 35 - topPad);
+
+            const gateName = comp.type;
+
+            const contId = nextId++;
+            const container = {
+                id: contId,
+                x: contX,
+                y: contY,
+                width: contW,
+                height: contH,
+                title: gateName,
+                _expandedFrom: gateName
+            };
+            customContainers.push(container);
+            renderCustomContainer(container);
+
+            const idMap = {};
+            shiftedSubComps.forEach(sc => {
+                const newId = nextId++;
+                idMap[sc.id] = newId;
+                const newSc = JSON.parse(JSON.stringify(sc));
+                newSc.id = newId;
+                newSc.x = snapValue(sc.x);
+                newSc.y = snapValue(sc.y);
+                newSc.state = sc.state || 0;
+                newSc.outputVal = sc.outputVal || 0;
+                if (newSc.isCustom && newSc.type && savedCustomGates[newSc.type]) {
+                    newSc.def = savedCustomGates[newSc.type];
+                }
+                if (newSc.type === 'DELAY') {
+                    newSc.delayVal = sc.delayVal || 3;
+                    newSc.delayQueue = new Array(newSc.delayVal).fill(0);
+                }
+                if (newSc.type === 'SCREEN') {
+                    newSc.pixelWidth = sc.pixelWidth || 40;
+                    newSc.pixelHeight = sc.pixelHeight || 40;
+                }
+                components.push(newSc);
+                renderComponent(newSc);
+            });
+
+            const newWires = comp.subWires.map(w => ({
+                fromComp: idMap[w.fromComp] || w.fromComp,
+                fromPort: w.fromPort,
+                toComp: idMap[w.toComp] || w.toComp,
+                toPort: w.toPort
+            }));
+            newWires.forEach(w => { wires.push(w); });
+
+            removeComponent(comp.id, true);
+
+            runSimulation();
+            drawWires();
+            saveToLocalStorage();
+
+            const contEl = document.getElementById(`container-${contId}`);
+            if (contEl) {
+                contEl.style.boxShadow = '0 0 0 3px #ffc107';
+                setTimeout(() => { contEl.style.boxShadow = ''; }, 2000);
+                contEl.dataset.expandedFrom = gateName;
+            }
+            container._expandedFrom = gateName;
+
+            showToast(`Expanded "${gateName}" into a container. Edit and re-save to update.`, 'info');
+        }
+
+        // ─── render container ────────────────────────────────────────
+        function renderCustomContainer(cont) {
+            const el = document.createElement('div');
+            el.className = 'custom-container-wrapper';
+            el.id = `container-${cont.id}`;
+            el.style.left = cont.x + 'px';
+            el.style.top = cont.y + 'px';
+            el.style.width = cont.width + 'px';
+            if (cont._expandedFrom) {
+                el.dataset.expandedFrom = cont._expandedFrom;
+            }
+
+            const deleteGateBtn = cont._expandedFrom ? `
+                <button onclick="deleteCustomGate('${cont._expandedFrom}')" style="padding:2px 5px;font-size:9px;background:#dc3545;color:#fff;pointer-events:auto;" title="Delete this custom gate entirely">🗑 Gate</button>
+            ` : '';
+
+            const headerColor = cont.color || '#6f42c1';
+
+            el.innerHTML = `
+                <div class="custom-container-header" style="background:${headerColor};" onmousedown="startDragContainer(event,${cont.id})" ontouchstart="startDragContainer(event,${cont.id})">
+                    <input type="text" class="custom-title-input" value="${cont.title}" oninput="updateContainerTitle(${cont.id}, this)">
+                    <div style="display:flex;gap:3px;align-items:center;">
+                        <div style="display:flex;align-items:center;gap:3px;">
+                            <input type="color" value="${headerColor}" onchange="updateContainerColor(${cont.id}, this.value)" onclick="event.stopPropagation();" style="width:24px;height:20px;padding:1px;border:1px solid rgba(255,255,255,0.3);border-radius:3px;background:transparent;cursor:pointer;" />
+                        </div>
+                        ${deleteGateBtn}
+                        <button onclick="saveCustomGate(${cont.id})" style="padding:2px 5px;font-size:9px;background:#ffc107;color:#000;pointer-events:auto;">💾 Save</button>
+                        <button class="delete-btn" onclick="removeCustomContainer(${cont.id})" style="pointer-events:auto;">×</button>
+                    </div>
+                </div>
+                <div class="custom-container-box" id="box-${cont.id}" style="height:${cont.height}px;">
+                    <div class="resize-handle" onmousedown="startResizeContainer(event,${cont.id})" ontouchstart="startResizeContainer(event,${cont.id})"></div>
+                </div>`;
+            canvas.appendChild(el);
+        }
+
+        function updateContainerColor(id, color) {
+            const cont = customContainers.find(c => c.id === id);
+            if (!cont) return;
+            cont.color = color;
+            const el = document.getElementById(`container-${id}`);
+            if (el) {
+                const header = el.querySelector('.custom-container-header');
+                if (header) header.style.background = color;
+            }
+            if (cont._expandedFrom && savedCustomGates[cont._expandedFrom]) {
+                savedCustomGates[cont._expandedFrom].color = color;
+                components.forEach(c => {
+                    if (c.isCustom && c.type === cont._expandedFrom) {
+                        c.color = color;
+                        const gateEl = document.getElementById(`comp-${c.id}`);
+                        if (gateEl) {
+                            const header = gateEl.querySelector('.gate-header');
+                            if (header) header.style.background = color;
+                        }
+                    }
+                });
+                updateCustomGatesToolbar();
+            }
+            saveToLocalStorage();
+        }
+
+        async function deleteCustomGate(gateName) {
+            if (!savedCustomGates[gateName]) {
+                showToast(`Gate "${gateName}" not found.`, 'error');
+                return;
+            }
+            const confirmed = await showConfirm('Delete Custom Gate', `Delete "${gateName}" and all its instances?`);
+            if (!confirmed) return;
+
+            components = components.filter(c => {
+                if (c.isCustom && c.type === gateName) {
+                    const el = document.getElementById(`comp-${c.id}`);
+                    if (el) el.remove();
+                    return false;
+                }
+                return true;
+            });
+
+            const containersToRemove = customContainers.filter(c => c._expandedFrom === gateName);
+            containersToRemove.forEach(c => removeCustomContainer(c.id));
+            customContainers = customContainers.filter(c => c._expandedFrom !== gateName);
+
+            wires = wires.filter(w => {
+                const fromExists = components.some(c => c.id === w.fromComp);
+                const toExists = components.some(c => c.id === w.toComp);
+                return fromExists && toExists;
+            });
+
+            delete savedCustomGates[gateName];
+
+            updateCustomGatesToolbar();
+            saveToLocalStorage();
+            runSimulation();
+            drawWires();
+            showToast(`Gate "${gateName}" deleted.`, 'success');
+        }
+
+        // ─── container drag ──────────────────────────────────────────
+        let isDraggingCont = false;
+        let activeCont = null;
+        let dragStartMouseX = 0,
+            dragStartMouseY = 0;
+        let dragStartContX = 0,
+            dragStartContY = 0;
+        let dragStartInnerComps = [];
+
+        function startDragContainer(e, id) {
+            if (e.target.tagName === 'BUTTON' || e.target.classList.contains('resize-handle') || e.target.classList
+                    .contains('custom-title-input') || e.target.type === 'color') {
+                return;
+            }
+            isDraggingCont = true;
+            activeCont = customContainers.find(c => c.id === id);
+            if (!activeCont) return;
+            const rect = viewport.getBoundingClientRect();
+            const cx = e.clientX || (e.touches && e.touches[0].clientX);
+            const cy = e.clientY || (e.touches && e.touches[0].clientY);
+            dragStartMouseX = (cx - rect.left - panX) / zoom;
+            dragStartMouseY = (cy - rect.top - panY) / zoom;
+            dragStartContX = activeCont.x;
+            dragStartContY = activeCont.y;
+            dragStartInnerComps = getInnerComponents(activeCont).map(c => ({ id: c.id, x: c.x, y: c.y }));
+            e.stopPropagation();
+        }
+
+        function moveContainer(deltaX, deltaY) {
+            if (!activeCont) return;
+            const newX = snapValue(dragStartContX + deltaX);
+            const newY = snapValue(dragStartContY + deltaY);
+            activeCont.x = newX;
+            activeCont.y = newY;
+            const el = document.getElementById(`container-${activeCont.id}`);
+            if (el) {
+                el.style.left = newX + 'px';
+                el.style.top = newY + 'px';
+            }
+            dragStartInnerComps.forEach(ic => {
+                const comp = components.find(c => c.id === ic.id);
+                if (comp) {
+                    comp.x = snapValue(ic.x + deltaX);
+                    comp.y = snapValue(ic.y + deltaY);
+                    const compEl = document.getElementById(`comp-${comp.id}`);
+                    if (compEl) {
+                        compEl.style.left = comp.x + 'px';
+                        compEl.style.top = comp.y + 'px';
+                    }
+                }
+            });
+            markPortPositionsDirty();
+            drawWires();
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDraggingCont && activeCont) {
+                const rect = viewport.getBoundingClientRect();
+                const mx = (e.clientX - rect.left - panX) / zoom;
+                const my = (e.clientY - rect.top - panY) / zoom;
+                const deltaX = mx - dragStartMouseX;
+                const deltaY = my - dragStartMouseY;
+                moveContainer(deltaX, deltaY);
+            }
+        });
+        window.addEventListener('touchmove', (e) => {
+            if (isDraggingCont && activeCont && e.touches.length === 1) {
+                const rect = viewport.getBoundingClientRect();
+                const t = e.touches[0];
+                const mx = (t.clientX - rect.left - panX) / zoom;
+                const my = (t.clientY - rect.top - panY) / zoom;
+                const deltaX = mx - dragStartMouseX;
+                const deltaY = my - dragStartMouseY;
+                moveContainer(deltaX, deltaY);
+            }
+        });
+        window.addEventListener('mouseup', () => {
+            if (isDraggingCont) saveToLocalStorage();
+            isDraggingCont = false;
+            activeCont = null;
+            dragStartInnerComps = [];
+        });
+        window.addEventListener('touchend', () => {
+            if (isDraggingCont) saveToLocalStorage();
+            isDraggingCont = false;
+            activeCont = null;
+            dragStartInnerComps = [];
+        });
+
+        function updateContainerTitle(id, inputEl) {
+            const cont = customContainers.find(c => c.id === id);
+            if (cont) { cont.title = inputEl.value.trim() || `CustomIC${id}`;
+                saveToLocalStorage(); }
+        }
+
+        function startResizeContainer(event, id) {
+            event.stopPropagation();
+            const cont = customContainers.find(c => c.id === id);
+            const cx = event.clientX || (event.touches && event.touches[0].clientX);
+            const cy = event.clientY || (event.touches && event.touches[0].clientY);
+            const startW = cont.width,
+                startH = cont.height;
+
+            const onMove = (cx2, cy2) => {
+                const dx = (cx2 - cx) / zoom,
+                    dy = (cy2 - cy) / zoom;
+                cont.width = Math.max(120, snapValue(startW + dx));
+                cont.height = Math.max(100, snapValue(startH + dy));
+                const el = document.getElementById(`container-${id}`);
+                const box = document.getElementById(`box-${id}`);
+                if (el && box) { el.style.width = cont.width + 'px';
+                    box.style.height = cont.height + 'px'; }
+            };
+            const onMouseMove = (ev) => onMove(ev.clientX, ev.clientY);
+            const onTouchMove = (ev) => { if (ev.touches.length === 1) onMove(ev.touches[0].clientX, ev.touches[0]
+                    .clientY); };
+            const onEnd = () => {
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onEnd);
+                window.removeEventListener('touchmove', onTouchMove);
+                window.removeEventListener('touchend', onEnd);
+                saveToLocalStorage();
+            };
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onEnd);
+            window.addEventListener('touchmove', onTouchMove);
+            window.addEventListener('touchend', onEnd);
+        }
+
+        function removeCustomContainer(id) {
+            const cont = customContainers.find(c => c.id === id);
+            if (cont) {
+                const inner = getInnerComponents(cont);
+                inner.forEach(ic => removeComponent(ic.id, true));
+            }
+            customContainers = customContainers.filter(c => c.id !== id);
+            const el = document.getElementById(`container-${id}`);
+            if (el) el.remove();
+            saveToLocalStorage();
+        }
+
+        // ─── save custom gate ────────────────────────────────────────
+        function saveCustomGate(containerId) {
+            const cont = customContainers.find(c => c.id === containerId);
+            if (!cont) return;
+            let gateName = cont.title.trim();
+            if (!gateName) {
+                showToast('Please give your custom gate a valid name.', 'error');
+                return;
+            }
+
+            const innerComps = getInnerComponents(cont);
+
+            if (innerComps.length === 0) {
+                showToast('No components found inside this outline container!', 'error');
+                return;
+            }
+
+            const innerInputs = innerComps.filter(c => c.type === 'INPUT');
+            let innerOutputs = innerComps.filter(c => c.type === 'OUTPUT');
+
+            const innerIds = new Set(innerComps.map(c => c.id));
+            const connectedOutputs = innerOutputs.filter(out => {
+                return wires.some(w => w.toComp === out.id && innerIds.has(w.fromComp));
+            });
+
+            if (connectedOutputs.length === 0) {
+                showToast('No connected OUTPUT components found. Please wire them first.', 'error');
+                return;
+            }
+            if (innerInputs.length === 0) {
+                showToast('Your container must include at least one INPUT component!', 'error');
+                return;
+            }
+
+            innerOutputs = connectedOutputs;
+            innerInputs.sort((a, b) => a.y - b.y);
+            innerOutputs.sort((a, b) => a.y - b.y);
+
+            let minX = Infinity,
+                minY = Infinity,
+                maxX = -Infinity,
+                maxY = -Infinity;
+            innerComps.forEach(c => {
+                const el = document.getElementById(`comp-${c.id}`);
+                const w = el ? el.offsetWidth : 140,
+                    h = el ? el.offsetHeight : 60;
+                if (c.x < minX) minX = c.x;
+                if (c.y < minY) minY = c.y;
+                if (c.x + w > maxX) maxX = c.x + w;
+                if (c.y + h > maxY) maxY = c.y + h;
+            });
+            const pad = 20;
+            cont.x = snapValue(minX - pad);
+            cont.y = snapValue(minY - pad - 35);
+            cont.width = snapValue((maxX - minX) + pad * 2);
+            cont.height = snapValue((maxY - minY) + pad * 2);
+            const contEl = document.getElementById(`container-${containerId}`);
+            const boxEl = document.getElementById(`box-${containerId}`);
+            if (contEl && boxEl) {
+                contEl.style.left = cont.x + 'px';
+                contEl.style.top = cont.y + 'px';
+                contEl.style.width = cont.width + 'px';
+                boxEl.style.height = cont.height + 'px';
+            }
+
+            const innerCompIds = new Set(innerComps.map(c => c.id));
+            const innerWires = wires.filter(w => innerCompIds.has(w.fromComp) && innerCompIds.has(w.toComp));
+
+            const inputInitials = innerInputs.map(c => {
+                const name = (c.customLabel || '').trim();
+                return name ? name.charAt(0).toUpperCase() : '';
+            });
+            const outputInitials = innerOutputs.map(c => {
+                const name = (c.customLabel || '').trim();
+                return name ? name.charAt(0).toUpperCase() : '';
+            });
+
+            const storedInnerComps = innerComps.map(c => {
+                const clone = { ...c };
+                if (clone.isCustom && clone.def) {
+                    clone._defName = clone.def.name;
+                }
+                delete clone.def;
+                delete clone.delayQueue;
+                return clone;
+            });
+
+            const isReplacing = !!savedCustomGates[gateName];
+            const existingColor = isReplacing && savedCustomGates[gateName].color ? savedCustomGates[gateName].color : (cont
+                .color || '#6f42c1');
+
+            const newDef = {
+                name: gateName,
+                color: existingColor,
+                inputsCount: innerInputs.length,
+                outputsCount: innerOutputs.length,
+                inputInitials,
+                outputInitials,
+                innerInputs: innerInputs.map(c => c.id),
+                innerOutputs: innerOutputs.map(c => c.id),
+                innerComps: storedInnerComps,
+                innerWires: innerWires
+            };
+
+            savedCustomGates[gateName] = newDef;
+
+            if (isReplacing) {
+                const instances = components.filter(c => c.isCustom && c.type === gateName);
+                const instanceData = instances.map(c => ({ id: c.id, x: c.x, y: c.y }));
+                instanceData.forEach(data => {
+                    const el = document.getElementById(`comp-${data.id}`);
+                    if (el) el.remove();
+                    components = components.filter(c => c.id !== data.id);
+                    spawnCustomGateInstance(gateName, data.x, data.y);
+                });
+                wires = wires.filter(w => {
+                    const fromExists = components.some(c => c.id === w.fromComp);
+                    const toExists = components.some(c => c.id === w.toComp);
+                    return fromExists && toExists;
+                });
+            }
+
+            updateCustomGatesToolbar();
+            saveToLocalStorage();
+            runSimulation();
+            drawWires();
+
+            showToast(`Custom Gate "${gateName}" ${isReplacing ? 'updated' : 'saved'}! (${innerOutputs.length} output${innerOutputs.length>1?'s':''})`,
+                'success');
+        }
+
+        // ─── custom gates toolbar ────────────────────────────────────
+        function updateCustomGatesToolbar() {
+            const group = document.getElementById('custom-gates-toolbar');
+            group.innerHTML = '';
+            for (const name in savedCustomGates) {
+                const btn = document.createElement('div');
+                btn.className = 'tool-btn';
+                btn.style.background = (savedCustomGates[name].color || '#6f42c1');
+                btn.innerText = name;
+                btn.onmousedown = (e) => startGhostDrag(e, name);
+                btn.ontouchstart = (e) => startGhostDrag(e, name);
+                group.appendChild(btn);
+            }
+        }
+
+        // ─── IC manager ──────────────────────────────────────────────
+        function openICManager() {
+            const list = document.getElementById('ic-modal-list');
+            list.innerHTML = '';
+            const keys = Object.keys(savedCustomGates);
+            if (!keys.length) {
+                list.innerHTML = '<div style="font-size:11px;color:gray;text-align:center;padding:10px;">No custom ICs saved yet.</div>';
+            } else {
+                keys.forEach(name => {
+                    const item = document.createElement('div');
+                    item.className = 'ic-item';
+                    const def = savedCustomGates[name];
+                    const safeColor = def.color || '#6f42c1';
+                    item.innerHTML = `
+                        <span><strong>${name}</strong> (${def.inputsCount} in, ${def.outputsCount} out)</span>
+                        <div style="display:flex;gap:3px;align-items:center;">
+                            <input class="ic-color-picker" type="color" value="${safeColor}" title="Custom gate color" onchange="setCustomGateColor('${name}', this.value)">
+                            <button onclick="renameIC('${name}')" style="padding:2px 5px;font-size:9px;background:#2563eb;">Rename</button>
+                            <button onclick="deleteIC('${name}')" style="padding:2px 5px;font-size:9px;background:#dc3545;">Delete</button>
+                        </div>`;
+                    list.appendChild(item);
+                });
+            }
+            document.getElementById('ic-modal').style.display = 'flex';
+        }
+
+        function closeICManager() { document.getElementById('ic-modal').style.display = 'none'; }
+
+        function closeICManagerOutside(e) { if (e.target.id === 'ic-modal') closeICManager(); }
+
+        function setCustomGateColor(name, color) {
+            const def = savedCustomGates[name];
+            if (!def || !/^#[0-9a-fA-F]{6}$/.test(color)) return;
+            def.color = color;
+            components.forEach(c => {
+                if (c.isCustom && c.type === name) {
+                    c.def = def;
+                    const el = document.getElementById(`comp-${c.id}`);
+                    if (el) el.style.setProperty('--gate-color', color);
+                }
+            });
+            updateCustomGatesToolbar();
+            saveToLocalStorage();
+            runSimulation();
+        }
+
+        async function renameIC(oldName) {
+            const newName = prompt(`Enter new name for "${oldName}":`, oldName);
+            if (!newName || !newName.trim() || newName.trim() === oldName) return;
+            const trimmed = newName.trim();
+            if (savedCustomGates[trimmed]) {
+                showToast('A custom gate with that name already exists!', 'error');
+                return;
+            }
+            savedCustomGates[trimmed] = savedCustomGates[oldName];
+            savedCustomGates[trimmed].name = trimmed;
+            delete savedCustomGates[oldName];
+            components.forEach(c => { if (c.type === oldName) { c.type = trimmed;
+                    c.def.name = trimmed; } });
+            updateCustomGatesToolbar();
+            saveToLocalStorage();
+            openICManager();
+            components.forEach(c => {
+                if (c.type === trimmed) {
+                    const el = document.getElementById(`comp-${c.id}`);
+                    if (el) { const span = el.querySelector('.gate-header span');
+                        if (span) span.innerText = trimmed; }
+                }
+            });
+        }
+
+        async function deleteIC(name) {
+            const confirmed = await showConfirm('Delete Custom IC', `Delete "${name}" and all its instances?`);
+            if (!confirmed) return;
+            delete savedCustomGates[name];
+            components = components.filter(c => {
+                if (c.type === name) { const el = document.getElementById(`comp-${c.id}`);
+                    if (el) el.remove(); return false; }
+                return true;
+            });
+            wires = wires.filter(w => components.find(c => c.id === w.fromComp) && components.find(c => c.id === w.toComp));
+            updateCustomGatesToolbar();
+            drawWires();
+            saveToLocalStorage();
+            openICManager();
+        }
+
+        // ─── gate drag ───────────────────────────────────────────────
+        let isDraggingGate = false,
+            activeComp = null,
+            gateStartX = 0,
+            gateStartY = 0;
+
+        function startDragGate(e, id) {
+            if (e.target.classList.contains('pixel-delete-btn')) return;
+            if (e.target.tagName === 'BUTTON' || e.target.classList.contains('delete-btn') || e.target.tagName === 'INPUT')
+                return;
+            if (e.target.classList.contains('port')) return;
+            if (e.target.classList.contains('pixel-resize-handle')) return;
+
+            isDraggingGate = true;
+            activeComp = components.find(c => c.id === id);
+            if (!activeComp) return;
+            const cx = e.clientX || (e.touches && e.touches[0].clientX);
+            const cy = e.clientY || (e.touches && e.touches[0].clientY);
+            const rect = viewport.getBoundingClientRect();
+            gateStartX = (cx - rect.left - panX) / zoom - activeComp.x;
+            gateStartY = (cy - rect.top - panY) / zoom - activeComp.y;
+            e.stopPropagation();
+            e.preventDefault();
+        }
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDraggingGate && activeComp) {
+                const rect = viewport.getBoundingClientRect();
+                let mx = (e.clientX - rect.left - panX) / zoom;
+                let my = (e.clientY - rect.top - panY) / zoom;
+                const snapped = snapPos(mx, my);
+                mx = snapped.x;
+                my = snapped.y;
+                activeComp.x = mx - gateStartX;
+                activeComp.y = my - gateStartY;
+                const el = document.getElementById(`comp-${activeComp.id}`);
+                if (el) {
+                    el.style.left = activeComp.x + 'px';
+                    el.style.top = activeComp.y + 'px';
+                    markPortPositionsDirty();
+                    drawWires();
+                }
+            }
+        });
+        window.addEventListener('touchmove', (e) => {
+            if (isDraggingGate && activeComp && e.touches.length === 1) {
+                const t = e.touches[0];
+                const rect = viewport.getBoundingClientRect();
+                let mx = (t.clientX - rect.left - panX) / zoom;
+                let my = (t.clientY - rect.top - panY) / zoom;
+                const snapped = snapPos(mx, my);
+                mx = snapped.x;
+                my = snapped.y;
+                activeComp.x = mx - gateStartX;
+                activeComp.y = my - gateStartY;
+                const el = document.getElementById(`comp-${activeComp.id}`);
+                if (el) {
+                    el.style.left = activeComp.x + 'px';
+                    el.style.top = activeComp.y + 'px';
+                    markPortPositionsDirty();
+                    drawWires();
+                }
+            }
+        });
+        window.addEventListener('mouseup', () => { if (isDraggingGate) saveToLocalStorage();
+            isDraggingGate = false;
+            activeComp = null; });
+        window.addEventListener('touchend', () => { if (isDraggingGate) saveToLocalStorage();
+            isDraggingGate = false;
+            activeComp = null; });
+
+        // ─── remove component ────────────────────────────────────────
+        function removeComponent(id, skipSave) {
+            components = components.filter(c => c.id !== id);
+            wires = wires.filter(w => w.fromComp !== id && w.toComp !== id);
+            const el = document.getElementById(`comp-${id}`);
+            if (el) el.remove();
+            markPortPositionsDirty();
+            runSimulation();
+            drawWires();
+            if (!skipSave) saveToLocalStorage();
+        }
+
+        // ─── toggle input ────────────────────────────────────────────
+        function toggleInput(id) {
+            const comp = components.find(c => c.id === id);
+            if (!comp) return;
+            comp.state = comp.state === 0 ? 1 : 0;
+            comp.outputVal = comp.state;
+            const btn = document.getElementById(`sw-${id}`);
+            if (btn) { btn.classList.toggle('active');
+                btn.innerText = comp.state === 1 ? 'ON' : 'OFF'; }
+            runSimulation();
+            saveToLocalStorage();
+        }
+
+        // ─── temp wire ───────────────────────────────────────────────
+        function updateTempWire(cx, cy) {
+            if (!draggingWire) return;
+            const fRect = draggingWire.el.getBoundingClientRect();
+            const cRect = canvas.getBoundingClientRect();
+            const x1 = (fRect.left + fRect.width / 2 - cRect.left) / zoom;
+            const y1 = (fRect.top + fRect.height / 2 - cRect.top) / zoom;
+            const x2 = (cx - cRect.left) / zoom;
+            const y2 = (cy - cRect.top) / zoom;
+            const dx = Math.abs(x2 - x1) * 0.5;
+            const tw = document.getElementById('temp-wire');
+            tw.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+        }
+
+        function resetWiring() {
+            draggingWire = null;
+            const tw = document.getElementById('temp-wire');
+            if (tw) { tw.setAttribute('visibility', 'hidden');
+                tw.setAttribute('d', ''); }
+        }
+
+        // ─── HIGH PERFORMANCE SIMULATION ─────────────────────────────
+        // Topological sort + change propagation
+
+        function getGateInputs(comp) {
+            const ins = [];
+            for (let i = 0; i < (comp.inputs || []).length; i++) {
+                const w = wires.find(w => w.toComp === comp.id && w.toPort === i);
+                if (w) {
+                    const src = components.find(c => c.id === w.fromComp);
+                    if (src) {
+                        let val = 0;
+                        if (src.isCustom && w.fromPort !== undefined) {
+                            val = (src.outputsArray && src.outputsArray[w.fromPort] !== undefined) ? src.outputsArray[w
+                                .fromPort] : 0;
+                        } else {
+                            val = src.outputVal || 0;
+                        }
+                        ins[i] = val;
+                    } else { ins[i] = 0; }
+                } else { ins[i] = 0; }
+            }
+            return ins;
+        }
+
+        function evaluateGate(comp, inputs) {
+            if (comp.type === 'INPUT') return comp.state;
+            if (comp.type === 'AND') return (inputs[0] === 1 && inputs[1] === 1) ? 1 : 0;
+            if (comp.type === 'OR') return (inputs[0] === 1 || inputs[1] === 1) ? 1 : 0;
+            if (comp.type === 'XOR') return (inputs[0] !== inputs[1]) ? 1 : 0;
+            if (comp.type === 'NOT') return inputs[0] === 1 ? 0 : 1;
+            if (comp.type === 'NAND') return !(inputs[0] === 1 && inputs[1] === 1) ? 1 : 0;
+            if (comp.type === 'NOR') return !(inputs[0] === 1 || inputs[1] === 1) ? 1 : 0;
+            if (comp.type === 'XNOR') return (inputs[0] === inputs[1]) ? 1 : 0;
+            if (comp.type === 'OUTPUT') return inputs[0];
+            if (comp.type === 'SCREEN') return inputs[0];
+            if (comp.type === 'DELAY') {
+                if (!comp.delayQueue) {
+                    comp.delayVal = comp.delayVal || 3;
+                    comp.delayQueue = new Array(comp.delayVal).fill(0);
+                }
+                const out = comp.delayQueue[0] || 0;
+                comp.delayQueue.shift();
+                comp.delayQueue.push(inputs[0] || 0);
+                return out;
+            }
+            return 0;
+        }
+
+        function evaluateCustomGate(comp) {
+            const sub = comp.subComps || [];
+            const sw = comp.subWires || [];
+            if (!sub.length) {
+                comp.outputsArray = new Array((comp.def && comp.def.outputsCount) || 0).fill(0);
+                comp.outputVal = 0;
+                return;
+            }
+
+            const byId = new Map(sub.map(sc => [sc.id, sc]));
+
+            // Set input values
+            const inputs = sub.filter(sc => sc.type === 'INPUT').sort((a, b) => a.y - b.y);
+            inputs.forEach((ic, i) => {
+                const v = comp.inputs[i] === 1 ? 1 : 0;
+                ic.state = v;
+                ic.outputVal = v;
+            });
+
+            // Topological evaluation with change propagation
+            const subIds = new Set(sub.map(s => s.id));
+            const subWires = sw.filter(w => subIds.has(w.fromComp) && subIds.has(w.toComp));
+
+            // Build dependency graph
+            const depMap = new Map();
+            sub.forEach(s => depMap.set(s.id, []));
+            subWires.forEach(w => {
+                if (depMap.has(w.toComp)) {
+                    depMap.get(w.toComp).push(w.fromComp);
+                }
+            });
+
+            // Simple iterative evaluation with change detection
+            let changed = true;
+            let iter = 0;
+            const maxIter = Math.min(30, sub.length * 2 + 5);
+            while (changed && iter < maxIter) {
+                changed = false;
+                iter++;
+                sub.forEach(sc => {
+                    if (sc.type === 'INPUT') return;
+                    const oldOut = sc.outputVal;
+                    const ins = [];
+                    for (let i = 0; i < (sc.inputs || []).length; i++) {
+                        const w = subWires.find(w => w.toComp === sc.id && w.toPort === i);
+                        if (w) {
+                            const src = byId.get(w.fromComp);
+                            if (src) {
+                                let val = 0;
+                                if (src.isCustom && w.fromPort !== undefined) {
+                                    val = (src.outputsArray && src.outputsArray[w.fromPort] !== undefined) ? src
+                                        .outputsArray[w.fromPort] : 0;
+                                } else {
+                                    val = src.outputVal || 0;
+                                }
+                                ins[i] = val;
+                            } else { ins[i] = 0; }
+                        } else { ins[i] = 0; }
+                    }
+                    sc.inputs = ins;
+
+                    if (sc.isCustom) {
+                        evaluateCustomGate(sc);
+                    } else if (sc.type === 'DELAY') {
+                        if (comp.delayStates && comp.delayStates[sc.id]) {
+                            const st = comp.delayStates[sc.id];
+                            const val = st.queue[st.ptr] || 0;
+                            st.queue[st.ptr] = ins[0] || 0;
+                            st.ptr = (st.ptr + 1) % st.queue.length;
+                            sc.outputVal = val;
+                        } else {
+                            sc.outputVal = 0;
+                        }
+                    } else {
+                        sc.outputVal = evaluateGate(sc, ins);
+                    }
+                    if (oldOut !== sc.outputVal) changed = true;
+                });
+            }
+
+            const outputs = sub.filter(sc => sc.type === 'OUTPUT').sort((a, b) => a.y - b.y);
+            comp.outputsArray = outputs.map(oc => oc.outputVal === 1 ? 1 : 0);
+            comp.outputVal = comp.outputsArray[0] || 0;
+        }
+
+        function runSimulation() {
+            // Build dependency graph for top-level components
+            const idSet = new Set(components.map(c => c.id));
+            const depMap = new Map();
+            components.forEach(c => depMap.set(c.id, []));
+            wires.forEach(w => {
+                if (depMap.has(w.toComp) && idSet.has(w.fromComp)) {
+                    depMap.get(w.toComp).push(w.fromComp);
+                }
+            });
+
+            // Propagate changes
+            let changed = true;
+            let iter = 0;
+            const maxIter = Math.min(30, components.length * 2 + 5);
+            while (changed && iter < maxIter) {
+                changed = false;
+                iter++;
+                components.forEach(comp => {
+                    if (comp.type === 'INPUT') return;
+                    const oldOut = comp.outputVal;
+                    const oldOuts = comp.outputsArray ? [...comp.outputsArray] : [];
+
+                    // Compute inputs from wires
+                    const ins = [];
+                    for (let i = 0; i < (comp.inputs || []).length; i++) {
+                        const w = wires.find(w => w.toComp === comp.id && w.toPort === i);
+                        if (w) {
+                            const src = components.find(c => c.id === w.fromComp);
+                            if (src) {
+                                let val = 0;
+                                if (src.isCustom && w.fromPort !== undefined) {
+                                    val = (src.outputsArray && src.outputsArray[w.fromPort] !== undefined) ? src
+                                        .outputsArray[w.fromPort] : 0;
+                                } else {
+                                    val = src.outputVal || 0;
+                                }
+                                ins[i] = val;
+                            } else { ins[i] = 0; }
+                        } else { ins[i] = 0; }
+                    }
+                    comp.inputs = ins;
+
+                    if (comp.isCustom) {
+                        evaluateCustomGate(comp);
+                    } else {
+                        comp.outputVal = evaluateGate(comp, ins);
+                    }
+
+                    const outChanged = oldOut !== comp.outputVal;
+                    const outsChanged = comp.outputsArray ? oldOuts.some((v, i) => v !== comp.outputsArray[i]) : false;
+                    if (outChanged || outsChanged) changed = true;
+                });
+            }
+
+            updateVisuals();
+        }
+
+        function stepSimulation() {
+            // Advance delay gates one tick
+            components.forEach(comp => {
+                if (comp.type === 'DELAY') {
+                    if (!comp.delayQueue) {
+                        comp.delayVal = comp.delayVal || 3;
+                        comp.delayQueue = new Array(comp.delayVal).fill(0);
+                    }
+                    const inputVal = comp.inputs[0] || 0;
+                    comp.outputVal = comp.delayQueue[0] || 0;
+                    comp.delayQueue.shift();
+                    comp.delayQueue.push(inputVal);
+                } else if (comp.isCustom) {
+                    // Tick delays inside custom gates
+                    const sub = comp.subComps || [];
+                    sub.forEach(sc => {
+                        if (sc.type === 'DELAY' && comp.delayStates && comp.delayStates[sc.id]) {
+                            const st = comp.delayStates[sc.id];
+                            const val = st.queue[st.ptr] || 0;
+                            st.queue[st.ptr] = sc.inputs[0] || 0;
+                            st.ptr = (st.ptr + 1) % st.queue.length;
+                            sc.outputVal = val;
+                        }
+                    });
+                }
+            });
+            runSimulation();
+        }
+
+        // ─── simulation loop ─────────────────────────────────────────
+        let simInterval = setInterval(() => {
+            if (!isPaused) {
+                // Tick all delay gates
+                components.forEach(comp => {
+                    if (comp.type === 'DELAY') {
+                        if (!comp.delayQueue) {
+                            comp.delayVal = comp.delayVal || 3;
+                            comp.delayQueue = new Array(comp.delayVal).fill(0);
+                        }
+                        const inputVal = comp.inputs[0] || 0;
+                        comp.outputVal = comp.delayQueue[0] || 0;
+                        comp.delayQueue.shift();
+                        comp.delayQueue.push(inputVal);
+                    } else if (comp.isCustom) {
+                        const sub = comp.subComps || [];
+                        sub.forEach(sc => {
+                            if (sc.type === 'DELAY' && comp.delayStates && comp.delayStates[sc.id]) {
+                                const st = comp.delayStates[sc.id];
+                                const val = st.queue[st.ptr] || 0;
+                                st.queue[st.ptr] = sc.inputs[0] || 0;
+                                st.ptr = (st.ptr + 1) % st.queue.length;
+                                sc.outputVal = val;
+                            }
+                        });
+                    }
+                });
+                runSimulation();
+            }
+        }, 150);
+
+        // ─── visuals ─────────────────────────────────────────────────
+        function updateVisuals() {
+            const len = components.length;
+            for (let i = 0; i < len; i++) {
+                const comp = components[i];
+                const el = document.getElementById(`comp-${comp.id}`);
+                if (!el) continue;
+                let powered = comp.outputVal === 1;
+                if (comp.isCustom && comp.outputsArray && comp.outputsArray.length) {
+                    powered = comp.outputsArray.some(v => v === 1);
+                }
+                el.classList.toggle('powered', powered);
+
+                if (comp.type === 'OUTPUT') {
+                    const bulb = document.getElementById(`bulb-${comp.id}`);
+                    if (bulb) bulb.classList.toggle('on', comp.outputVal === 1);
+                }
+
+                if (comp.type === 'SCREEN') {
+                    const pixel = document.getElementById(`pixel-${comp.id}`);
+                    if (pixel) {
+                        const val = comp.inputs && comp.inputs[0] ? 1 : 0;
+                        pixel.classList.toggle('on', val === 1);
+                    }
+                }
+
+                comp.inputs.forEach((val, idx) => {
+                    const p = document.getElementById(`port-${comp.id}-in-${idx}`);
+                    if (p) p.classList.toggle('active-port', val === 1);
+                });
+                if (comp.isCustom) {
+                    comp.outputsArray.forEach((val, idx) => {
+                        const p = document.getElementById(`port-${comp.id}-out-${idx}`);
+                        if (p) p.classList.toggle('active-port', val === 1);
+                    });
+                } else if (comp.type !== 'SCREEN') {
+                    const p = document.getElementById(`port-${comp.id}-out-0`);
+                    if (p) p.classList.toggle('active-port', comp.outputVal === 1);
+                }
+            }
+
+            const wLen = wires.length;
+            for (let i = 0; i < wLen; i++) {
+                const wire = wires[i];
+                const p = document.getElementById(`wire-${i}`);
+                if (p) {
+                    const src = components.find(c => c.id === wire.fromComp);
+                    if (src) {
+                        let pw = false;
+                        if (src.isCustom && wire.fromPort !== undefined) {
+                            pw = src.outputsArray[wire.fromPort] === 1;
+                        } else { pw = src.outputVal === 1; }
+                        p.classList.toggle('powered', pw);
+                    }
+                }
+            }
+        }
+
+        // ─── draw wires ──────────────────────────────────────────────
+        let wireDrawPending = false;
+
+        function drawWires() {
+            if (wireDrawPending) return;
+            wireDrawPending = true;
+            requestAnimationFrame(() => {
+                wireDrawPending = false;
+                updatePortPositions();
+
+                if (!svgWires || !document.body.contains(svgWires)) {
+                    svgWires = document.getElementById('wires');
+                    if (!svgWires) return;
+                }
+
+                // Only rebuild if needed - incremental would be better but this is simpler
+                const tempWire = document.getElementById('temp-wire');
+                svgWires.innerHTML = '';
+                if (tempWire) {
+                    svgWires.appendChild(tempWire);
+                } else {
+                    const tw = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    tw.setAttribute('id', 'temp-wire');
+                    tw.setAttribute('d', '');
+                    tw.setAttribute('stroke', '#e83e8c');
+                    tw.setAttribute('stroke-width', '3');
+                    tw.setAttribute('stroke-dasharray', '5,5');
+                    tw.setAttribute('fill', 'none');
+                    tw.setAttribute('visibility', 'hidden');
+                    svgWires.appendChild(tw);
+                }
+
+                const wLen = wires.length;
+                for (let i = 0; i < wLen; i++) {
+                    const wire = wires[i];
+                    const fromKey = `${wire.fromComp}-out-${wire.fromPort}`;
+                    const toKey = `${wire.toComp}-in-${wire.toPort}`;
+                    const fromPos = portPositions[fromKey];
+                    const toPos = portPositions[toKey];
+                    if (fromPos && toPos) {
+                        const x1 = fromPos.x;
+                        const y1 = fromPos.y;
+                        const x2 = toPos.x;
+                        const y2 = toPos.y;
+                        const dx = Math.abs(x2 - x1) * 0.5;
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+                        path.setAttribute('class', 'wire-path');
+                        path.setAttribute('id', `wire-${i}`);
+
+                        path.onclick = (e) => {
+                            e.stopPropagation();
+                            wires.splice(i, 1);
+                            markPortPositionsDirty();
+                            runSimulation();
+                            drawWires();
+                            saveToLocalStorage();
+                            showToast('Wire deleted.', 'info', 1200);
+                        };
+                        path.onmousedown = (e) => e.stopPropagation();
+                        path.ontouchstart = (e) => e.stopPropagation();
+
+                        svgWires.appendChild(path);
+                    }
+                }
+                updateVisuals();
+            });
+        }
+
+        // ─── clear all ───────────────────────────────────────────────
+        async function clearAll() {
+            const confirmed = await showConfirm('Clear Everything', 'Are you sure you want to clear everything?');
+            if (!confirmed) return;
+            components = [];
+            wires = [];
+            customContainers = [];
+            savedCustomGates = {};
+            canvas.innerHTML =
+                '<div id="grid-bg" onmousedown="startPan(event)" ontouchstart="startTouchPanZoom(event)"></div><svg id="wires"><path id="temp-wire" d="" stroke="#e83e8c" stroke-width="3" stroke-dasharray="5,5" fill="none" visibility="hidden" /></svg>';
+            svgWires = document.getElementById('wires');
+            updateCustomGatesToolbar();
+            resetWiring();
+            markPortPositionsDirty();
+            drawWires();
+            localStorage.removeItem('logic_sim_save_state_v4');
+            localStorage.removeItem('logic_sim_save_state_v3');
+            localStorage.removeItem('logic_sim_save_state_v2');
+            localStorage.removeItem('logic_sim_save_state');
+            showToast('All cleared.', 'info');
+        }
+
+        // ─── init ────────────────────────────────────────────────────
+        window.addEventListener('load', () => {
+            loadFromLocalStorage();
+            updateTransform();
+            updateCustomGatesToolbar();
+            svgWires = document.getElementById('wires');
+            customContainers.forEach(cont => renderCustomContainer(cont));
+            components.forEach(comp => renderComponent(comp));
+            markPortPositionsDirty();
+            drawWires();
+            runSimulation();
+            console.log('✅ High-Performance Logic Simulator loaded.');
+        });
+
+        // ─── global exports ──────────────────────────────────────────
+        window.startGhostDrag = startGhostDrag;
+        window.togglePause = togglePause;
+        window.stepSimulation = stepSimulation;
+        window.resetView = resetView;
+        window.toggleTheme = toggleTheme;
+        window.clearAll = clearAll;
+        window.openICManager = openICManager;
+        window.closeICManager = closeICManager;
+        window.closeICManagerOutside = closeICManagerOutside;
+        window.renameIC = renameIC;
+        window.setCustomGateColor = setCustomGateColor;
+        window.deleteIC = deleteIC;
+        window.deleteCustomGate = deleteCustomGate;
+        window.expandCustomGate = expandCustomGate;
+        window.saveCustomGate = saveCustomGate;
+        window.removeCustomContainer = removeCustomContainer;
+        window.removeComponent = removeComponent;
+        window.startDragContainer = startDragContainer;
+        window.startResizeContainer = startResizeContainer;
+        window.startResizePixel = startResizePixel;
+        window.updateContainerTitle = updateContainerTitle;
+        window.startDragGate = startDragGate;
+        window.toggleInput = toggleInput;
+        window.closeConfirm = closeConfirm;
+        window.closeConfirmOutside = closeConfirmOutside;
+        window.showToast = showToast;
+        window.showConfirm = showConfirm;
+        window.startPan = startPan;
+        window.startTouchPanZoom = startTouchPanZoom;
+        window.handleZoom = handleZoom;
+        window.exportCircuit = exportCircuit;
+        window.importCircuit = importCircuit;
+        window.snapValue = snapValue;
+        window.markPortPositionsDirty = markPortPositionsDirty;
+
+        console.log('✅ All functions registered.');
+    </script>
+</body>
+</html>
