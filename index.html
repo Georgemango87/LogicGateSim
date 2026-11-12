@@ -13103,18 +13103,16 @@ window.drawTimingDiagram = drawTimingDiagram;
             });
         }
 
-        // Validate — walk each RHS in order. A signal is legal if it's a
-        // declared input, or an assignment already defined earlier.
-        const assignedSoFar = new Set();
+        // Pass 2 — validate: every RHS identifier must be either a
+        // declared input or an assigned signal name. Order is irrelevant:
+        // forward references and self-references are both allowed so
+        // feedback loops like  Q = (D AND WE) OR (Q AND NOT WE)  compile.
         for(const a of assignments){
             collectIdentifiers(a.ast, (name) => {
                 if(declaredInputs.has(name)) return;
-                if(assignedSoFar.has(name))  return;
-                if(assignedNames.has(name))
-                    throw new Error('Line ' + a.lineNo + ': "' + name + '" used before it\'s defined. Move its equation above.');
-                throw new Error('Line ' + a.lineNo + ': "' + name + '" is not a declared input.');
+                if(assignedNames.has(name))  return;
+                throw new Error('Line ' + a.lineNo + ': "' + name + '" is not a declared input or assigned signal.');
             });
-            assignedSoFar.add(a.name);
         }
 
         return { assignments, inputs: Array.from(declaredInputs).sort() };
@@ -13166,7 +13164,6 @@ window.drawTimingDiagram = drawTimingDiagram;
         const GATE_GAP = S.gateGap     ?? 20;
 
         const colNextY = new Map();
-
         function placeGate(col, height){
             const existing = colNextY.get(col);
             const y = existing !== undefined ? existing : Y_START;
@@ -13176,8 +13173,7 @@ window.drawTimingDiagram = drawTimingDiagram;
 
         function spawnGateAndGet(type, x, y){
             const beforeCount = components.length;
-            const result = spawnComponentAt(type, x, y);
-            if(result && typeof result === 'object' && 'id' in result) return result;
+            spawnComponentAt(type, x, y);
             if(components.length !== beforeCount + 1)
                 throw new Error('Failed to spawn ' + type + ' gate at (' + x + ',' + y + ')');
             return components[components.length - 1];
@@ -13191,13 +13187,11 @@ window.drawTimingDiagram = drawTimingDiagram;
             if(io) io.textContent = name;
         }
 
-        /* — Place all inputs in column 0 — */
+        /* ── Place all inputs in column 0 ── */
         const inputMap = new Map();
         for(let i = 0; i < parsed.inputs.length; i++){
             const name = parsed.inputs[i];
-            const x = X_START + 0 * COL_W;
-            const y = Y_START + i * ROW_STEP;
-            const comp = spawnGateAndGet('INPUT', x, y);
+            const comp = spawnGateAndGet('INPUT', X_START, Y_START + i * ROW_STEP);
             setGateLabel(comp, name);
             inputMap.set(name, comp);
         }
@@ -13205,96 +13199,185 @@ window.drawTimingDiagram = drawTimingDiagram;
             colNextY.set(0, Y_START + parsed.inputs.length * ROW_STEP);
         }
 
-        /* — Compile AST nodes to gates with dedup — */
-        const gateByKey   = new Map();  // canonical AST key → comp
-        const namedSignals = new Map(); // assignment name → { comp, depth }
-        const pendingWires = [];        // deferred so we can batch at the end
+        /* ── Pass 1: pre-create one "root gate" per assignment ──
+           The gate type is the RHS's top-level operator. Its inputs are
+           wired in Pass 2. Creating the gate first means self-references
+           and forward-references can resolve to a real component
+           immediately — which is exactly what makes feedback loops
+           like  Q = (D AND WE) OR (Q AND NOT WE)  compile cleanly. */
+        const signalGate = new Map();   // name → comp (the gate whose output IS this signal)
 
-        function canonicalKey(node){
-            if(node.type === 'input') return 'I:' + node.name;
-            if(node.type === 'not')   return 'N:' + canonicalKey(node.operand);
-            if(node.type === 'op'){
-                const comm = ['AND','OR','XOR','NAND','NOR','XNOR'].indexOf(node.op) !== -1;
-                const a = canonicalKey(node.left);
-                const b = canonicalKey(node.right);
-                if(comm){
-                    const pair = a < b ? [a, b] : [b, a];
-                    return 'O:' + node.op + ':' + pair[0] + ':' + pair[1];
-                }
-                return 'O:' + node.op + ':' + a + ':' + b;
-            }
-            return '?';
+        for(const a of parsed.assignments){
+            if(a.ast.type === 'input') continue;   // alias — resolved below
+            const type = (a.ast.type === 'not') ? 'NOT' : a.ast.op;
+            signalGate.set(a.name, spawnGateAndGet(type, 0, 0));
         }
 
-        function compileNode(node){
-            /* — Leaf — */
+        /* ── Resolve aliases (Q = A) transitively, with cycle detection ── */
+        const aliasResolving = new Set();
+        function resolveAlias(name){
+            if(signalGate.has(name)) return signalGate.get(name);
+            if(inputMap.has(name))   return inputMap.get(name);
+            if(aliasResolving.has(name))
+                throw new Error('Circular alias: "' + name + '"');
+            aliasResolving.add(name);
+            const a = parsed.assignments.find(x => x.name === name);
+            let result = null;
+            if(a && a.ast.type === 'input'){
+                result = resolveAlias(a.ast.name);
+            }
+            aliasResolving.delete(name);
+            if(result) signalGate.set(name, result);
+            return result;
+        }
+        for(const a of parsed.assignments){
+            if(a.ast.type === 'input') resolveAlias(a.name);
+        }
+
+        /* ── Pass 2: build each RHS sub-graph, wire into its root gate ──
+           Self-refs and forward-refs resolve via signalGate. The feedback
+           wire (e.g. OR → rightAND.in0) is simply a normal wire here;
+           the simulator's iterative BFS handles the propagation. */
+        const pendingWires = [];   // { from, fromPort, to, toPort }
+
+        function compileSubGraph(node, currentName){
             if(node.type === 'input'){
-                if(inputMap.has(node.name))
-                    return { comp: inputMap.get(node.name), depth: 0 };
-                if(namedSignals.has(node.name))
-                    return namedSignals.get(node.name);
+                if(node.name === currentName){
+                    const g = signalGate.get(currentName);
+                    if(!g) throw new Error(
+                        'Self-reference in alias "' + currentName +
+                        '" — add an operator (e.g. Q = NOT NOT Q).');
+                    return g;
+                }
+                if(signalGate.has(node.name)) return signalGate.get(node.name);
+                if(inputMap.has(node.name))   return inputMap.get(node.name);
                 throw new Error('Unknown signal "' + node.name + '"');
             }
-
-            const key = canonicalKey(node);
-            if(gateByKey.has(key)){
-                const comp = gateByKey.get(key);
-                return { comp, depth: comp._scriptDepth };
-            }
-
-            /* — NOT — */
             if(node.type === 'not'){
-                const inner = compileNode(node.operand);
-                const depth = inner.depth + 1;
-                const { x, y } = placeGate(depth, 60);
-                const comp = spawnGateAndGet('NOT', x, y);
-                comp._scriptDepth = depth;
-                pendingWires.push({ fromComp: inner.comp.id, fromPort: 0, toComp: comp.id, toPort: 0 });
-                gateByKey.set(key, comp);
-                return { comp, depth };
+                const comp = spawnGateAndGet('NOT', 0, 0);
+                const child = compileSubGraph(node.operand, currentName);
+                pendingWires.push({ from: child, fromPort: 0, to: comp, toPort: 0 });
+                return comp;
             }
-
-            /* — Binary op — */
-            const left  = compileNode(node.left);
-            const right = compileNode(node.right);
-            const depth = Math.max(left.depth, right.depth) + 1;
-            const { x, y } = placeGate(depth, 80);
-            const comp = spawnGateAndGet(node.op, x, y);
-            comp._scriptDepth = depth;
-            pendingWires.push({ fromComp: left.comp.id,  fromPort: 0, toComp: comp.id, toPort: 0 });
-            pendingWires.push({ fromComp: right.comp.id, fromPort: 0, toComp: comp.id, toPort: 1 });
-            gateByKey.set(key, comp);
-            return { comp, depth };
+            if(node.type === 'op'){
+                const comp = spawnGateAndGet(node.op, 0, 0);
+                const left  = compileSubGraph(node.left,  currentName);
+                const right = compileSubGraph(node.right, currentName);
+                pendingWires.push({ from: left,  fromPort: 0, to: comp, toPort: 0 });
+                pendingWires.push({ from: right, fromPort: 0, to: comp, toPort: 1 });
+                return comp;
+            }
+            throw new Error('Unknown AST node type "' + node.type + '"');
         }
 
-        /* — Compile each assignment, register its name as a reusable signal — */
-        const outputEntries = [];
-        let maxDepth = 0;
         for(const a of parsed.assignments){
-            const res = compileNode(a.ast);
-            namedSignals.set(a.name, res);
-            if(res.depth > maxDepth) maxDepth = res.depth;
-            outputEntries.push({ name: a.name, src: res });
+            const root = signalGate.get(a.name);
+            if(!root || a.ast.type === 'input') continue;   // alias or skipped
+            if(a.ast.type === 'not'){
+                const child = compileSubGraph(a.ast.operand, a.name);
+                pendingWires.push({ from: child, fromPort: 0, to: root, toPort: 0 });
+            } else if(a.ast.type === 'op'){
+                const left  = compileSubGraph(a.ast.left,  a.name);
+                const right = compileSubGraph(a.ast.right, a.name);
+                pendingWires.push({ from: left,  fromPort: 0, to: root, toPort: 0 });
+                pendingWires.push({ from: right, fromPort: 0, to: root, toPort: 1 });
+            }
         }
 
-        /* — Place OUTPUTs in the final column — */
+        /* ── Cycle-safe depth computation ──
+           depthVisiting marks gates on the current DFS stack. A back-edge
+           (a source already on the stack) contributes depth 0 so cycles
+           don't infinite-loop. INPUTs resolve to depth 0 naturally
+           (incoming map is empty for them, so maxChild stays -1). */
+        const incoming = new Map();
+        for(const w of pendingWires){
+            let list = incoming.get(w.to.id);
+            if(!list){ list = []; incoming.set(w.to.id, list); }
+            list.push(w.from);
+        }
+        const depthMemo = new Map();
+        const depthVisiting = new Set();
+
+        function computeDepth(comp){
+            if(depthMemo.has(comp.id)) return depthMemo.get(comp.id);
+            if(depthVisiting.has(comp.id)) return 0;   // back-edge
+            depthVisiting.add(comp.id);
+            let maxChild = -1;
+            const sources = incoming.get(comp.id);
+            if(sources){
+                for(const src of sources){
+                    const d = computeDepth(src);
+                    if(d > maxChild) maxChild = d;
+                }
+            }
+            depthVisiting.delete(comp.id);
+            const depth = maxChild + 1;
+            depthMemo.set(comp.id, depth);
+            return depth;
+        }
+
+        for(const comp of components){
+            if(comp.type === 'INPUT') continue;
+            computeDepth(comp);
+        }
+
+        /* ── Place gates column by column ── */
+        for(const comp of components){
+            if(comp.type === 'INPUT') continue;
+            const d = depthMemo.get(comp.id) ?? 1;
+            const h = (comp.type === 'NOT') ? 60 : 80;
+            const { x, y } = placeGate(d, h);
+            comp.x = x; comp.y = y; comp._scriptDepth = d;
+            const el = compEls.get(comp.id);
+            if(el){ el.style.left = x + 'px'; el.style.top = y + 'px'; }
+        }
+
+        /* ── Place OUTPUTs one column past the deepest gate ── */
+        let maxDepth = 0;
+        for(const comp of components){
+            if(comp.type === 'INPUT') continue;
+            const d = depthMemo.get(comp.id) ?? 1;
+            if(d > maxDepth) maxDepth = d;
+        }
         const outCol = maxDepth + 1;
-        for(const e of outputEntries){
+
+        const outputEntries = [];
+        for(const [name, comp] of signalGate){
+            if(!comp) continue;
             const { x, y } = placeGate(outCol, 60);
             const outComp = spawnGateAndGet('OUTPUT', x, y);
-            setGateLabel(outComp, e.name);
-            pendingWires.push({ fromComp: e.src.comp.id, fromPort: 0, toComp: outComp.id, toPort: 0 });
+            setGateLabel(outComp, name);
+            pendingWires.push({ from: comp, fromPort: 0, to: outComp, toPort: 0 });
+            outputEntries.push({ name, comp, outComp });
         }
 
-        /* — Push all wires — */
+        /* ── Commit pending wires ── */
         for(const w of pendingWires){
-            if(w.fromComp === w.toComp) continue;
-            wires.push(newWire(w.fromComp, w.fromPort, w.toComp, w.toPort));
+            if(!w.from || !w.to) continue;
+            if(w.from.id === w.to.id) continue;   // skip self-wire
+            const exists = wires.some(x =>
+                x.fromComp === w.from.id && x.fromPort === w.fromPort &&
+                x.toComp   === w.to.id   && x.toPort   === w.toPort);
+            if(exists) continue;
+            wires.push(newWire(w.from.id, w.fromPort, w.to.id, w.toPort));
+        }
+
+        /* ── Initialise every gate output to 0 ──
+           Gives feedback loops a defined starting state. INPUTs are
+           skipped (their state is user-controlled). spawnComponentAt()
+           already sets '0', but this loop guarantees it explicitly and
+           insulates us from future changes to spawnComponentAt. */
+        for(const comp of components){
+            if(comp.type === 'INPUT') continue;
+            comp.outputVal = '0';
+            if(Array.isArray(comp.outputsArray)){
+                comp.outputsArray = comp.outputsArray.map(() => '0');
+            }
         }
 
         return {
             inputs:  parsed.inputs.length,
-            gates:   gateByKey.size,       // inputs are NOT in gateByKey
+            gates:   components.filter(c => c.type !== 'INPUT' && c.type !== 'OUTPUT').length,
             outputs: outputEntries.length
         };
     }
