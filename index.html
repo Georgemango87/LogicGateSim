@@ -4447,10 +4447,13 @@ document.addEventListener('keydown',e=>{
         }
         return;
     }
-    if(ctrl&&e.key==='z'&&!e.shiftKey){e.preventDefault();undo();return}
-    if((ctrl&&e.key==='z'&&e.shiftKey)||(ctrl&&e.key==='y')){e.preventDefault();redo();return}
-    if(ctrl&&e.key==='c'){e.preventDefault();copySelected();return}
-    if(ctrl&&e.key==='v'){e.preventDefault();pasteAtCursor();return}
+    const _inTextField = document.activeElement?.tagName==='INPUT'
+        || document.activeElement?.tagName==='TEXTAREA'
+        || document.activeElement?.isContentEditable;
+    if(ctrl&&e.key==='z'&&!e.shiftKey&&!_inTextField){e.preventDefault();undo();return}
+    if(((ctrl&&e.key==='z'&&e.shiftKey)||(ctrl&&e.key==='y'))&&!_inTextField){e.preventDefault();redo();return}
+    if(ctrl&&e.key==='c'&&!_inTextField){e.preventDefault();copySelected();return}
+    if(ctrl&&e.key==='v'&&!_inTextField){e.preventDefault();pasteAtCursor();return}
     if((e.key==='Delete'||e.key==='Backspace')
        &&document.activeElement?.tagName!=='INPUT'
        &&document.activeElement?.tagName!=='TEXTAREA'
