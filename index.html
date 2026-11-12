@@ -12945,7 +12945,7 @@ window.drawTimingDiagram = drawTimingDiagram;
        ════════════════════════════════════════════════════════ */
 
     /* ── 2.1 Tokenizer ─────────────────────────────────────── */
-    const SCRIPT_OPS = ['AND','OR','NOT','XOR','NAND','NOR','XNOR'];
+    const SCRIPT_OPS = ['AND','OR','NOT','XOR','NAND','NOR','XNOR','DELAY'];
 
     function lexScript(src){
         const tokens = [];
@@ -13019,6 +13019,10 @@ window.drawTimingDiagram = drawTimingDiagram;
                 eat();
                 return { type:'not', operand: parseNot() };
             }
+            if(peek() && peek().t === 'DELAY'){
+                eat();
+                return { type:'delay', operand: parseNot() };
+            }
             return parseAtom();
         }
         function parseAtom(){
@@ -13047,7 +13051,8 @@ window.drawTimingDiagram = drawTimingDiagram;
     function parseScriptSource(src){
         const lines       = src.split(/\r?\n/);
         const assignments = [];
-        const declaredInputs = new Set();
+        const declaredInputs  = new Set();
+        const declaredOutputs = new Set();
 
         for(let i = 0; i < lines.length; i++){
             let line = lines[i];
@@ -13065,6 +13070,22 @@ window.drawTimingDiagram = drawTimingDiagram;
                     if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
                         throw new Error('Line ' + lineNo + ': invalid input name "' + n + '"');
                     declaredInputs.add(n);
+                }
+                continue;
+            }
+
+            // Optional declaration line:  outputs: o1, o2, o4, o8
+            // Only the named signals become OUTPUT gates. Every other
+            // assignment stays internal (hidden from the canvas edge).
+            // Omit this line to keep the default behaviour where every
+            // assigned signal is exported.
+            const outMatch = line.match(/^outputs?\s*:\s*(.+)$/i);
+            if(outMatch){
+                const names = outMatch[1].split(/[,\s]+/).filter(Boolean);
+                for(const n of names){
+                    if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
+                        throw new Error('Line ' + lineNo + ': invalid output name "' + n + '"');
+                    declaredOutputs.add(n);
                 }
                 continue;
             }
@@ -13115,12 +13136,17 @@ window.drawTimingDiagram = drawTimingDiagram;
             });
         }
 
-        return { assignments, inputs: Array.from(declaredInputs).sort() };
+        return {
+            assignments,
+            inputs:  Array.from(declaredInputs).sort(),
+            outputs: Array.from(declaredOutputs)
+        };
     }
 
     function collectIdentifiers(node, fn){
         if(node.type === 'input') fn(node.name);
         else if(node.type === 'not') collectIdentifiers(node.operand, fn);
+        else if(node.type === 'delay') collectIdentifiers(node.operand, fn);
         else if(node.type === 'op'){
             collectIdentifiers(node.left, fn);
             collectIdentifiers(node.right, fn);
@@ -13341,14 +13367,31 @@ window.drawTimingDiagram = drawTimingDiagram;
         }
         const outCol = maxDepth + 1;
 
+        /* If the script declares `outputs:`, only those named signals
+           get an OUTPUT gate. Otherwise every assigned signal is
+           exported (previous default). Raw inputs are also accepted
+           as passthrough outputs. */
+        const declaredOutNames = (parsed.outputs && parsed.outputs.length)
+            ? parsed.outputs
+            : null;
+        if(declaredOutNames){
+            for(const n of declaredOutNames){
+                if(!signalGate.has(n) && !inputMap.has(n))
+                    throw new Error('Declared output "' + n + '" is not an assigned signal or input.');
+            }
+        }
+        const outputNames = declaredOutNames || Array.from(signalGate.keys());
+
         const outputEntries = [];
-        for(const [name, comp] of signalGate){
-            if(!comp) continue;
+        for(const name of outputNames){
+            let srcComp = signalGate.get(name);
+            if(!srcComp && inputMap.has(name)) srcComp = inputMap.get(name);
+            if(!srcComp) continue;
             const { x, y } = placeGate(outCol, 60);
             const outComp = spawnGateAndGet('OUTPUT', x, y);
             setGateLabel(outComp, name);
-            pendingWires.push({ from: comp, fromPort: 0, to: outComp, toPort: 0 });
-            outputEntries.push({ name, comp, outComp });
+            pendingWires.push({ from: srcComp, fromPort: 0, to: outComp, toPort: 0 });
+            outputEntries.push({ name, comp: srcComp, outComp });
         }
 
         /* ── Commit pending wires ── */
@@ -14102,7 +14145,8 @@ window.drawTimingDiagram = drawTimingDiagram;
                     const upper = word.toUpperCase();
                     if (KEYWORDS.has(upper)) {
                         out += `<span class="tok-keyword">${word}</span>`;
-                    } else if (upper === 'INPUTS' || upper === 'INPUT') {
+                    } else if (upper === 'INPUTS' || upper === 'INPUT' ||
+                               upper === 'OUTPUTS' || upper === 'OUTPUT') {
                         out += `<span class="tok-decl">${word}</span>`;
                     } else {
                         out += `<span class="tok-ident">${escapeHtml(word)}</span>`;
